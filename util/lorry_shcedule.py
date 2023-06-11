@@ -11,7 +11,7 @@ class Lorry(object):
     Function: updata health, move to some positon, fix or broken ...
     '''
     def __init__(self, lorry_id:str = 'lorry_0', capacity:float = 2.0, weight:float = 0.0,\
-                 state:str = 'delivery', position:str = 'Factory0', destination:str = 'Factory0', product:str = 'A', eng=None, mdl:str=None,\
+                 state:str = 'delivery', position:str = 'Factory0', destination:str = 'Factory0', product:str = 'A',\
                  path:str = 'result', time_broken:int = 86400, mdp_freq:float = 6*3600, env_step:int = 3600, broken_freq:float = 86400*20,\
                  maintenance_freq:float = 4*3600, repair_freq:float = 86400*3) -> None:
         '''
@@ -24,15 +24,6 @@ class Lorry(object):
         position: string
         destination: string
         path: save the experiments result
-
-        MDP parameter, unit is second
-        time_broken: time based repair speed
-        mdp_freq: mdp transfor frequency when lorry is running
-        env_step: RL time step
-        broken_freq: random failure frequency
-        maintenance_freq: maintenance successful frequency
-        repair_freq: repair succseeful frequency
-
         '''
         # Create lorry in sumo. If the lorry already exist, remove it first
         try:
@@ -57,60 +48,11 @@ class Lorry(object):
         self.time_step = 0
         # record total transported product
         self.total_product = 0.0
-
-        # self.reward = pd.DataFrame({'time':[0.0], 'total_product':[0.0]})
-        # self.reward.set_index(['time'], inplace=True)
-
-        # Markov state
-        #    5 (lambda_0 = 0.013364)
-        #0 1 2 3 4 (lambda_1=0.333442, lambda_m=0.653194)
-        self.mk_state = 0
-        lm_0 = env_step/broken_freq
-        lm_1 = env_step/mdp_freq
-        self.mu0 = env_step/maintenance_freq
-        self.mu1 = env_step/repair_freq
-        self.threshold1 = lm_0
-        self.threshold2 = 1-lm_1
-        # Transfer the state after time 'state_trans'
-        self.state_trans = env_step
         self.step = 1
-        self.maintenance_step = 0
-        self.broken_step = 0
-
-        # recover after time_broken
-        self.time_broken = time_broken # 1 day
-        self.time_repair = 3600 * 4 # 4 hours
-        self.frequency = 86400 # 1 day
 
         # Temporal repaired time step
         self.step_repair = 0
         self.path = path + '/lorry_record.csv'
-
-        # matlab engine
-        self.eng = eng
-        self.mdl = mdl
-
-        # maintenance flag, when true, the engine start maintenance
-        # default: False
-        self.maintenance_flag = False
-        # episode flag
-        self.episode_flag = False
-
-        # sensor reading
-        # self.sensor_store = pd.read_csv('sensor.csv',index_col=0)
-        self.sensor_store = pd.DataFrame(
-                             {'s1':[-0.261865793780688, -0.261865793780687, 0.854862119013063,  0,                  0.1, 0.3, 0.5, 0.7, 0,                  0],
-                              's2':[0,                  -0.261865793780687, 0.854862119013063,  0,                  0.1, 0.3, 0.5, 0.7, 0,                  0],
-                              's3':[0.232220609580154,  0.510258310975582,  0.854862119013064,  0,                  0.1, 0.3, 0.5, 0.7, 0,                  0],
-                              's4':[0.41230769230978,   0.412307692307698,  0.854862119013063,  0,                  0.1, 0.3, 0.5, 0.7, 0,                  0],
-                              's5':[0.615384615388344,  0.615384615385666,  0.854862119013063,  0,                  0.1, 0.3, 0.5, 0.7, 0,                  0],
-                              's6':[0.854862119017747,  0.854862119015461,  0.854862119013063,  1.4255319149081,    0.1, 0.3, 0.5, 0.7, 1.4255319149081,    0],
-                              's7':[1.0000000000064,    1.00000000000655,   1.00000000000091,   1.0000000000086,    0.1, 0.3, 0.5, 0.7, 0.412307692308142,  0],
-                              's8':[1.16366612112214,   1.16366612112405,   0.854862119012898,  1.42553191490811,   0.1, 0.3, 0.5, 0.7, 0,                  0],
-                              's9':[1.42553191490218,   1.16366612112405,   0.854862119012898,  1.42553191490811,   0.1, 0.3, 0.5, 0.7, 0,                  0],
-                              'MDPstate':[0,            1,                  2,                  3,                  4,   5,   6,   7,   8,                  9]}
-                              )
-        self.sensor = self.sensor_store.loc[self.sensor_store['MDPstate']==self.mk_state]
 
     
     def update_lorry(self, capacity:float = 10000.0, weight:float = 0.0,\
@@ -153,44 +95,6 @@ class Lorry(object):
 
         self.position = parking_state.stoppingPlaceID
 
-        # fix some bug, ensure lorry stop when maintenance
-        # if self.mk_state > 3 and self.recover_state=='delivery' and len(tmp_pk)==1:
-        #     self.lorry_stop()
-
-        # # Lorry maintenance
-        # if self.maintenance_flag:
-        #     self.maintenance()
-        # elif self.state == 'maintenance':
-        #     self.maintenance_step += 1
-        #     if self.maintenance_step%self.state_trans==1:
-        #         self.maintenance()
-        
-        # # Repair the engine
-        # if repair_flag:
-        #     self.repair()
-
-        # if self.state == 'broken':
-        #     self.broken_step += 1
-        #     if self.broken_step % self.state_trans == 1:
-        #         self.broken_repair()
-        # # mannually repair the engine
-        # elif self.state == 'repair':
-        #     self.step_repair +=1
-        #     if self.step_repair % self.time_repair == 0:
-        #         self.state = self.recover_state
-        #         self.mk_state = 0
-        #         self.step += 1
-        #         # In sumo the lorry resume from stop
-        #         # traci.vehicle.resume(vehID=self.id)
-        #         self.lorry_resume()
-        #         # print(f'[recover] {self.id}, mdp state: {self.mk_state}')
-        #         with open(self.path,'a') as f:
-        #             f_csv = writer(f)
-        #             f_csv.writerow([self.time_step,self.id,self.mk_state,'recover after repaired'])
-                
-        #         # terminate the episode
-        #         self.episode_flag = True
-        # ignore the maintenance state
         if self.state == 'broken':
             pass
         elif self.mk_state > 3:
@@ -204,16 +108,6 @@ class Lorry(object):
             self.state = 'pending for unloading'
         elif self.weight == 0:
             self.state = 'waitting'
-        # Update the engine state and get sensor reading from Simulink
-        # if self.state == 'delivery' and self.step % self.state_trans ==0:
-        #     self.MDP_model()
-        #     if self.mk_state == 8 or self.mk_state == 9:
-        #         # print(f'[Broken] {self.id}')
-        #         self.state = 'broken'
-        #         with open(self.path,'a') as f:
-        #             f_csv = writer(f)
-        #             f_csv.writerow([self.time_step,self.id,self.mk_state,'broken'])
-        #         self.lorry_stop()
                 
         self.sensor = self.sensor_store.loc[self.sensor_store['MDPstate']==self.mk_state]
         return {'state':self.state, 'postion':self.position}
@@ -425,34 +319,5 @@ class Lorry(object):
                 return 'try again'
         else:
             return 'broken'
-
-    
-    def MDP_model(self) -> None:
-        '''
-        Update the Simulink model
-        State 0: Normal
-        State 1: Clutch A, locked fault
-        State 2: Clutch B,C  locked fault
-        State 3: Clutch D,E locked fault, F unlocked fault
-        State 4: Clutch A,B unlocked fault, E,F locked fault
-        State 5: Clutch A,B,C,D,E,F unlocked fault
-
-        lm is a random number. 
-        If lm < 0.013364, Markov state go to 5. 
-        If lm > 0.666558, Markov state pluse 1
-        Otherwise, no change
-        '''
-        # self.sensor.drop(self.sensor.index, inplace=True)
-        lm = random.uniform(0,1)
-        if lm < self.threshold1:
-            self.mk_state = 9
-        elif lm > self.threshold2:
-            if self.mk_state < 3:
-                self.mk_state += 1
-            elif self.mk_state == 3:
-                self.mk_state = 8
-        else:
-            self.mk_state = self.mk_state
-        # print(f'[MDP state] {self.id} state: {self.mk_state}, time:{self.time_step}')
         
         

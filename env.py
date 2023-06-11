@@ -9,7 +9,7 @@ import sys
 import optparse
 import random
 
-from util.lorry_eva import Lorry
+from util.lorry_shcedule import Lorry
 from util.factory import Factory
 from util.product import product_management
 
