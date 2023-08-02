@@ -305,3 +305,11 @@ class Factory(object):
             unload_weight = min(0.05, self.container.loc[lorry.product,'capacity'] - self.container.loc[lorry.product,'storage'])
             lorry_state, exceed_cargo = lorry.unload_cargo(unload_weight)
             self.container.at[lorry.product,'storage'] = self.container.loc[lorry.product,'storage'] + (unload_weight - exceed_cargo)
+
+
+class World(object):
+    def __init__(self):
+        # list of agents 
+        self.agent = []
+
+        
