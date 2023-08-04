@@ -12,9 +12,8 @@ class Lorry(object):
     Function: updata health, move to some positon, fix or broken ...
     '''
     def __init__(self, lorry_id:str = 'lorry_0', capacity:float = 2.0, weight:float = 0.0,\
-                 state:str = 'delivery', position:str = 'Factory0', destination:str = 'Factory0', product:str = 'A', eng=None, mdl:str=None,\
-                 path:str = 'result', time_broken:int = 86400, mdp_freq:float = 6*3600, env_step:int = 3600, broken_freq:float = 86400*20,\
-                 maintenance_freq:float = 4*3600, repair_freq:float = 86400*3) -> None:
+                 state:str = 'delivery', position:str = 'Factory0', destination:str = 'Factory0', product:str = 'A',\
+                 path:str = 'result') -> None:
         '''
         Parameters:
         lorry_id: string
@@ -26,33 +25,11 @@ class Lorry(object):
         destination: string
         path: save the experiments result
 
-        MDP parameter, unit is second
-        time_broken: time based repair speed
-        mdp_freq: mdp transfor frequency when lorry is running
-        env_step: RL time step
-        broken_freq: random failure frequency
-        maintenance_freq: maintenance successful frequency
-        repair_freq: repair succseeful frequency
-
         '''
-        # Create lorry in sumo. If the lorry already exist, remove it first
-        try:
-            traci.vehicle.add(vehID=lorry_id,routeID=position + '_to_'+ destination, typeID='lorry')
-        except:
-            traci.vehicle.remove(vehID=lorry_id)
-            traci.vehicle.add(vehID=lorry_id,routeID=position + '_to_'+ destination, typeID='lorry')
-        traci.vehicle.setParkingAreaStop(vehID=lorry_id,stopID=position)
-        
         self.id = lorry_id
-        self.capacity = capacity
-        self.weight = weight
+        self.reset(weight,state,position,destination,product)
 
-        self.state = state
-        self.position = position
-        self.destination = destination
-        self.product = product
-        self.color = (255,255,0,255)
-        self.recover_state = 'waitting'
+        self.capacity = capacity
 
         # sumo time
         self.time_step = 0
@@ -60,6 +37,26 @@ class Lorry(object):
         self.total_product = 0.0
 
         self.path = path + '/lorry_record.csv'
+    
+    def reset(self,weight:float = 0.0, state:str = 'delivery', position:str = 'Factory0', destination:str = 'Factory0', product:str = 'A'):
+        # Create lorry in sumo. If the lorry already exist, remove it first
+        try:
+            traci.vehicle.add(vehID=self.id, routeID=position + '_to_'+ destination, typeID='lorry')
+        except:
+            traci.vehicle.remove(vehID=self.id)
+            traci.vehicle.add(vehID=self.id, routeID=position + '_to_'+ destination, typeID='lorry')
+        traci.vehicle.setParkingAreaStop(vehID=self.id,stopID=position)
+
+        self.weight = weight
+        self.state = state
+        self.position = position
+        self.destination = destination
+        self.product = product
+        self.color = (255,255,0,255)
+        self.recover_state = 'waitting'
+
+        # record total transported product
+        self.total_product = 0.0
 
     def update_lorry(self, capacity:float = 10000.0, weight:float = 0.0,\
                      state:str = 'delivery', position:str = 'Factory0', destination:str = 'Factory0') -> None:
@@ -233,17 +230,28 @@ class Factory(object):
         container: list of container, the element is product name.
         '''
         self.id = factory_id
+        self.produce_rate = produce_rate
+        self.container = container
 
         # Create a dataframe to record the products which are produced in current factory
-        self.product= pd.DataFrame(produce_rate,columns=['product','rate','material','ratio'])
-        self.product['total'] = [0.0] * len(produce_rate)
+        self.product= pd.DataFrame(self.produce_rate,columns=['product','rate','material','ratio'])
+        self.product['total'] = [0.0] * len(self.produce_rate)
         self.product.set_index(['product'],inplace=True)
         # The dataframe of the container
-        self.container = pd.DataFrame({'product':container, 'storage':[0.0]*len(container), 'capacity':[capacity] * 4 + [60000] * 4})
+        self.container = pd.DataFrame({'product':self.container, 'storage':[0.0]*len(self.container), 'capacity':[capacity] * 4 + [60000] * 4})
         self.container.set_index(['product'],inplace=True)
         self.container.at['P2','capacity'] = 2*capacity
+        self.reset()
 
         self.step = 0
+
+    def reset(self):
+        '''
+        Set total storage and total producd to 0
+        '''
+        self.product['total'] = [0.0] * len(self.produce_rate)
+        self.container['storage'] = [0.0]*len(self.container)
+
     
     def produce_product(self) -> None:
         '''
@@ -310,6 +318,12 @@ class Factory(object):
 class World(object):
     def __init__(self):
         # list of agents 
-        self.agent = []
-
+        self.agents = []
+        
+    
+    def step(self):
+        '''
+        update the 
+        '''
+        self.agents = []
         
