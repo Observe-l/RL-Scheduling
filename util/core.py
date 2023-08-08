@@ -5,28 +5,30 @@ from csv import writer
 
 import random
 
-class Lorry(object):
+class Truck(object):
     '''
-    The class of lorry. 
-    Parameters: lorry ID, health, position, destination ...
+    The class of truck. 
+    Parameters: truck ID, health, position, destination ...
     Function: updata health, move to some positon, fix or broken ...
     '''
-    def __init__(self, lorry_id:str = 'lorry_0', capacity:float = 2.0, weight:float = 0.0,\
+    def __init__(self, truck_id:str = 'truck_0', capacity:float = 2.0, weight:float = 0.0,\
                  state:str = 'delivery', position:str = 'Factory0', destination:str = 'Factory0', product:str = 'A',\
                  path:str = 'result') -> None:
         '''
         Parameters:
-        lorry_id: string
-        capacity: The maximum capacity(t) of lorry. Default value is 10 t
+        truck_id: string
+        capacity: The maximum capacity(t) of truck. Default value is 10 t
         product: current loading product
         weight: Current weight of cargo(kg).
-        state: The state of the lorry: waitting, loading, pending, delivery, repair, broken, maintenance
+        state: The state of the truck: waitting, loading, pending, delivery, repair, broken, maintenance
         position: string
         destination: string
         path: save the experiments result
 
         '''
-        self.id = lorry_id
+        self.id = truck_id
+        self.truck = True
+
         self.reset(weight,state,position,destination,product)
 
         self.capacity = capacity
@@ -35,16 +37,17 @@ class Lorry(object):
         self.time_step = 0
         # record total transported product
         self.total_product = 0.0
+        self.last_transport = 0.0
 
-        self.path = path + '/lorry_record.csv'
+        self.path = path + '/truck_record.csv'
     
     def reset(self,weight:float = 0.0, state:str = 'delivery', position:str = 'Factory0', destination:str = 'Factory0', product:str = 'A'):
-        # Create lorry in sumo. If the lorry already exist, remove it first
+        # Create truck in sumo. If the truck already exist, remove it first
         try:
-            traci.vehicle.add(vehID=self.id, routeID=position + '_to_'+ destination, typeID='lorry')
+            traci.vehicle.add(vehID=self.id, routeID=position + '_to_'+ destination, typeID='truck')
         except:
             traci.vehicle.remove(vehID=self.id)
-            traci.vehicle.add(vehID=self.id, routeID=position + '_to_'+ destination, typeID='lorry')
+            traci.vehicle.add(vehID=self.id, routeID=position + '_to_'+ destination, typeID='truck')
         traci.vehicle.setParkingAreaStop(vehID=self.id,stopID=position)
 
         self.weight = weight
@@ -57,8 +60,9 @@ class Lorry(object):
 
         # record total transported product
         self.total_product = 0.0
+        self.last_transport = 0.0
 
-    def update_lorry(self, capacity:float = 10000.0, weight:float = 0.0,\
+    def update_truck(self, capacity:float = 10000.0, weight:float = 0.0,\
                      state:str = 'delivery', position:str = 'Factory0', destination:str = 'Factory0') -> None:
         '''
         update the parameters
@@ -89,7 +93,7 @@ class Lorry(object):
                 # print(f'{self.id} has been deleted')
                 # print(f'weight: {self.weight}, mdp state: {self.mk_state}')
                 pass
-            traci.vehicle.add(vehID=self.id,routeID=self.destination + '_to_'+ self.destination, typeID='lorry')
+            traci.vehicle.add(vehID=self.id,routeID=self.destination + '_to_'+ self.destination, typeID='truck')
             traci.vehicle.setParkingAreaStop(vehID=self.id,stopID=self.destination)
             traci.vehicle.setColor(typeID=self.id,color=self.color)
             tmp_pk = traci.vehicle.getStops(vehID=self.id)
@@ -100,7 +104,7 @@ class Lorry(object):
         if parking_state.arrival < 0:
             self.state = 'delivery'
             if len(tmp_pk)>1:
-                self.lorry_resume()
+                self.truck_resume()
         elif self.weight == self.capacity and self.position == self.destination:
             self.state = 'pending for unloading'
         elif self.weight == 0:
@@ -109,13 +113,13 @@ class Lorry(object):
         return {'state':self.state, 'postion':self.position}
 
 
-    def lorry_stop(self):
+    def truck_stop(self):
         '''
-        When lorry broken or we decide to repair / maintain the lorry,
-        use this function to stop the lorry first
+        When truck broken or we decide to repair / maintain the truck,
+        use this function to stop the truck first
         Time-based function
         '''
-        # The lorry shouldn't break at factory road, otherwise, let it move to the end of the road
+        # The truck shouldn't break at factory road, otherwise, let it move to the end of the road
         current_edge = traci.vehicle.getRoadID(vehID=self.id)
         factory_idx = ['Factory0','Factory1','Factory2','Factory3']
         # arrive the destination
@@ -152,7 +156,7 @@ class Lorry(object):
                     else:
                         self.recover_state = 'pending for unloading'
     
-    def lorry_resume(self):
+    def truck_resume(self):
         tmp_pk = traci.vehicle.getStops(vehID=self.id)
         if len(tmp_pk) > 0:
             latest_pk = tmp_pk[0]
@@ -165,7 +169,7 @@ class Lorry(object):
         delevery the cargo to another factory
         '''
         self.state = 'delivery'
-        # Remove vehicle first, add another lorry. (If we want to use the dijkstra algorithm in SUMO, we must creat new vehicle)
+        # Remove vehicle first, add another truck. (If we want to use the dijkstra algorithm in SUMO, we must creat new vehicle)
         self.destination = destination
         traci.vehicle.changeTarget(vehID=self.id, edgeID=destination)
         # Move out the car parking area
@@ -176,9 +180,9 @@ class Lorry(object):
 
     def load_cargo(self, weight:float, product:str):
         '''
-        Load cargo to the lorry. Cannot exceed the maximum capacity. The unit should be 'kg'.
-        After the lorry is full, the state will change to pending, and the color change to Red
-        If lorry is not empty, it would be blue color
+        Load cargo to the truck. Cannot exceed the maximum capacity. The unit should be 'kg'.
+        After the truck is full, the state will change to pending, and the color change to Red
+        If truck is not empty, it would be blue color
         '''
         self.product = product
         if self.weight + weight < self.capacity:
@@ -193,13 +197,14 @@ class Lorry(object):
             self.state = 'pending for delivery'
             self.color = (255,0,0,255)
             traci.vehicle.setColor(typeID=self.id,color=self.color)
-            # After the lorry is full, record it
+            # After the truck is full, record it
+            self.last_transport = self.total_product
             self.total_product += self.weight
             return ('full', self.weight + weight - self.capacity)
     
     def unload_cargo(self, weight:float):
         '''
-        Unload cargo. If lorry is empty, health become waitting.
+        Unload cargo. If truck is empty, health become waitting.
         '''
         self.state = 'unloading'
         self.color = (0,0,255,255)
@@ -230,6 +235,8 @@ class Factory(object):
         container: list of container, the element is product name.
         '''
         self.id = factory_id
+        self.truck = False
+
         self.produce_rate = produce_rate
         self.container = container
 
@@ -242,6 +249,12 @@ class Factory(object):
         self.container.set_index(['product'],inplace=True)
         self.container.at['P2','capacity'] = 2*capacity
         self.reset()
+
+        # There two dimension of action: 1) Need trucks or not; 2) The number of new trucks
+        self.req_truck = False
+        self.req_num = 0
+        # The number of trucks which desitination is current factory or stop at current factory
+        self.truck_num = 0
 
         self.step = 0
 
@@ -285,34 +298,34 @@ class Factory(object):
                 self.container.at[index,'storage'] = self.container.loc[index,'storage'] + item_num
                 self.product.at[index,'total'] = self.product.loc[index,'total'] + item_num
     
-    def load_cargo(self, lorry:Lorry, product:str) -> str:
+    def load_cargo(self, truck:Truck, product:str) -> str:
         '''
-        Load cargo to the lorry in current factory
+        Load cargo to the truck in current factory
         '''
-        # Check the state and position of the lorry
+        # Check the state and position of the truck
         # Check the storage
-        if self.id in lorry.position and (lorry.state == 'waitting' or lorry.state == 'loading') and self.container.loc[product,'storage'] != 0:
-            # if lorry.state == 'waitting':
+        if self.id in truck.position and (truck.state == 'waitting' or truck.state == 'loading') and self.container.loc[product,'storage'] != 0:
+            # if truck.state == 'waitting':
                 # print when startting loading
-                # print(f'[loading] {lorry.id} start loading {product} at:{self.id}')
+                # print(f'[loading] {truck.id} start loading {product} at:{self.id}')
             # Maximum loading speed: 0.05 t/s
             load_weight = min(0.05, self.container.loc[product,'storage'])
-            lorry_state, exceed_cargo =  lorry.load_cargo(weight=load_weight, product= product)
+            truck_state, exceed_cargo =  truck.load_cargo(weight=load_weight, product= product)
             self.container.at[product,'storage'] = self.container.loc[product,'storage'] - (load_weight - exceed_cargo)
-            return lorry_state
+            return truck_state
     
-    def unload_cargo(self, lorry:Lorry) -> None:
+    def unload_cargo(self, truck:Truck) -> None:
         '''
         Unload cargo to container
         '''
-        if self.id in lorry.position and (lorry.state == 'pending for unloading' or lorry.state == 'unloading') and self.container.loc[lorry.product,'storage'] < self.container.loc[lorry.product,'capacity']:
-            # if lorry.state == 'pending for unloading':
+        if self.id in truck.position and (truck.state == 'pending for unloading' or truck.state == 'unloading') and self.container.loc[truck.product,'storage'] < self.container.loc[truck.product,'capacity']:
+            # if truck.state == 'pending for unloading':
                 # print when startting unloading
-                # print(f'[unloading] {lorry.id} start unloading {lorry.product} at:{self.id}')
+                # print(f'[unloading] {truck.id} start unloading {truck.product} at:{self.id}')
             # Maximum loading speed: 0.05 t/s
-            unload_weight = min(0.05, self.container.loc[lorry.product,'capacity'] - self.container.loc[lorry.product,'storage'])
-            lorry_state, exceed_cargo = lorry.unload_cargo(unload_weight)
-            self.container.at[lorry.product,'storage'] = self.container.loc[lorry.product,'storage'] + (unload_weight - exceed_cargo)
+            unload_weight = min(0.05, self.container.loc[truck.product,'capacity'] - self.container.loc[truck.product,'storage'])
+            truck_state, exceed_cargo = truck.unload_cargo(unload_weight)
+            self.container.at[truck.product,'storage'] = self.container.loc[truck.product,'storage'] + (unload_weight - exceed_cargo)
 
 
 class World(object):

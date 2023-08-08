@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import traci
-from .core import Lorry, Factory, World
+from .core import Truck, Factory, World
 
 class Scenario(object):
     def make_world():
@@ -10,7 +10,7 @@ class Scenario(object):
         # add agents, 12 trucks, 4 factories
         num_trucks = 12
         num_factories = 4
-        world.agents = [Lorry(lorry_id='lorry_'+str(i)) for i in range(num_trucks)]
+        world.agents = [Truck(truck_id='truck_'+str(i)) for i in range(num_trucks)]
 
         world.agents.append[Factory(factory_id='Factory0', produce_rate=[['P1',5,None,None]])]
         world.agents.append[Factory(factory_id='Factory1', produce_rate=[['P2',10,None,None],['P12',2.5,'P1,P2','1,1']])]
@@ -29,8 +29,37 @@ class Scenario(object):
         for agent in world.agents:
             agent.reset()
 
-    def reward(self, agent, world):
+    def truck_reward(self, agent, world):
         '''
-        
+        Calculate reward for the given truck agent.
+        The reward depends on the waitting time and the number of product transported during last time step
         '''
-        a= 10
+        rew = 0
+        rew = agent.total_product - agent.last_transport
+        return rew
+    
+    def factory_reward(self, ageng, world):
+        '''
+        '''
+        rew = 0
+    
+    def truck_agents(self, world):
+        return [agent for agent in world.agents if agent.truck]
+
+    def factory_agents(self,world):
+        return [agent for agent in world.agents if not agent.truck]
+    
+    def truck_observation(self, agent, world):
+        '''
+        The observation of trucks and factories.
+        For trucks: 1) Distance to the destination; 2) Communication (other trucks destination); 3) The state of the trucks
+        For factories: the storage of material and product.
+        '''
+
+    # def set_action(self, actions, agents):
+    #     '''
+    #     Set action for the agent, both Factories and Trucks.
+    #     First, factory take action, and then, trucks take action.
+    #     '''
+    #     # Set action for factory
+    #     for 
