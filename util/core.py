@@ -113,7 +113,7 @@ class Truck(object):
         return {'state':self.state, 'postion':self.position}
 
 
-    def truck_stop(self):
+    def truck_stop(self) -> None:
         '''
         When truck broken or we decide to repair / maintain the truck,
         use this function to stop the truck first
@@ -156,7 +156,7 @@ class Truck(object):
                     else:
                         self.recover_state = 'pending for unloading'
     
-    def truck_resume(self):
+    def truck_resume(self) -> None:
         tmp_pk = traci.vehicle.getStops(vehID=self.id)
         if len(tmp_pk) > 0:
             latest_pk = tmp_pk[0]
@@ -178,7 +178,7 @@ class Truck(object):
         traci.vehicle.setParkingAreaStop(vehID=self.id, stopID=self.destination)
         #print(f'[move] {self.id} move from {self.position} to {self.destination}')
 
-    def load_cargo(self, weight:float, product:str):
+    def load_cargo(self, weight:float, product:str) -> tuple:
         '''
         Load cargo to the truck. Cannot exceed the maximum capacity. The unit should be 'kg'.
         After the truck is full, the state will change to pending, and the color change to Red
@@ -202,7 +202,7 @@ class Truck(object):
             self.total_product += self.weight
             return ('full', self.weight + weight - self.capacity)
     
-    def unload_cargo(self, weight:float):
+    def unload_cargo(self, weight:float) -> tuple:
         '''
         Unload cargo. If truck is empty, health become waitting.
         '''
@@ -219,6 +219,24 @@ class Truck(object):
             self.color = (0,255,0,255)
             traci.vehicle.setColor(typeID=self.id,color=self.color)
             return ('not enough', remainning_weight)
+    
+    def get_distance(self, positon) -> float:
+        traci.vehicle.changeTarget(vehID=self.id, edgeID=positon)
+        distance = traci.vehicle.getDrivingDistance(vehID=self.id, edgeID=positon, position=positon)
+        traci.vehicle.changeTarget(vehID=self.id, edgeID=self.destination)
+
+        return distance
+    
+    def get_truck_state(self) -> int:
+        if self.state == 'waitting':
+            return 1
+        else:
+            return 0
+    
+    def get_destination(self) -> int:
+        truck_destination = int(self.destination[-1])
+        return truck_destination
+        
 
 
 class Factory(object):
@@ -258,7 +276,7 @@ class Factory(object):
 
         self.step = 0
 
-    def reset(self):
+    def reset(self) -> None:
         '''
         Set total storage and total producd to 0
         '''
@@ -326,7 +344,14 @@ class Factory(object):
             unload_weight = min(0.05, self.container.loc[truck.product,'capacity'] - self.container.loc[truck.product,'storage'])
             truck_state, exceed_cargo = truck.unload_cargo(unload_weight)
             self.container.at[truck.product,'storage'] = self.container.loc[truck.product,'storage'] + (unload_weight - exceed_cargo)
-
+        
+    def get_material(self):
+        tmp_material = list(filter(lambda item: item is not None,self.product['material'].values.tolist()))
+        material = []
+        for i in tmp_material:
+            i = i.split(',')
+            material.extend(i)
+        return material
 
 class World(object):
     def __init__(self):

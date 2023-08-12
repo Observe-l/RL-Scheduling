@@ -49,12 +49,46 @@ class Scenario(object):
     def factory_agents(self,world):
         return [agent for agent in world.agents if not agent.truck]
     
-    def truck_observation(self, agent, world):
+    def observation(self, agent, world):
         '''
         The observation of trucks and factories.
-        For trucks: 1) Distance to the destination; 2) Communication (other trucks destination); 3) The state of the trucks
+        For trucks: 1) Distance to the all factories; 2) Communication (other trucks destination); 3) The state of the trucks
         For factories: the storage of material and product.
         '''
+
+        # The distance between trucks and the destination
+        distance = []
+        factory_agents = self.factory_agents(world)
+        truck_agents = self.truck_agents(world)
+        if agent.truck:
+            '''
+            observation of trucks
+            '''
+            for factory_agent in factory_agents:
+                distance.append(agent.get_distance(factory_agent.id))
+            state = agent.get_truck_state()
+
+            # Comunicate with other trucks, get their action.
+            com_destination = []
+            truck_agents = self.truck_agents(world)
+            for other in truck_agents:
+                if other is agent: continue
+                com_destination.append(other.get_destination)
+            return np.concatenate([distance] + [com_destination])
+        else:
+            '''
+            obesrvation of factories
+            '''
+            product_storage = []
+            for factory_product in agent.product.index:
+                product_storage.append(agent.contriner.loc[factory_product,'storage'])
+            material_storage = []
+
+        
+
+
+        
+
 
     # def set_action(self, actions, agents):
     #     '''
