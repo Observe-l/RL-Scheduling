@@ -345,7 +345,7 @@ class Factory(object):
             truck_state, exceed_cargo = truck.unload_cargo(unload_weight)
             self.container.at[truck.product,'storage'] = self.container.loc[truck.product,'storage'] + (unload_weight - exceed_cargo)
         
-    def get_material(self):
+    def get_material(self) -> list:
         tmp_material = list(filter(lambda item: item is not None,self.product['material'].values.tolist()))
         material = []
         for i in tmp_material:

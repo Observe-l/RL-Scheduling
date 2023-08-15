@@ -19,7 +19,7 @@ class Scenario(object):
 
         return world()
     
-    def reset_world(self, world):
+    def reset_world(self, world) -> None:
         try:
             traci.close()
             print('restart sumo')
@@ -29,7 +29,15 @@ class Scenario(object):
         for agent in world.agents:
             agent.reset()
 
-    def truck_reward(self, agent, world):
+    def reward(self,agent,world) -> float:
+        '''
+        Reward of both trcuks or factories
+        '''
+        main_reward = self.truck_reward(agent, world)
+        return main_reward
+
+        
+    def truck_reward(self, agent, world) -> float:
         '''
         Calculate reward for the given truck agent.
         The reward depends on the waitting time and the number of product transported during last time step
@@ -38,15 +46,15 @@ class Scenario(object):
         rew = agent.total_product - agent.last_transport
         return rew
     
-    def factory_reward(self, ageng, world):
+    def factory_reward(self, ageng, world) -> float:
         '''
         '''
         rew = 0
     
-    def truck_agents(self, world):
+    def truck_agents(self, world) -> list:
         return [agent for agent in world.agents if agent.truck]
 
-    def factory_agents(self,world):
+    def factory_agents(self,world) -> list:
         return [agent for agent in world.agents if not agent.truck]
     
     def observation(self, agent, world):
@@ -56,6 +64,9 @@ class Scenario(object):
         For factories: the storage of material and product.
         '''
 
+        '''
+        No communication
+        '''
         # The distance between trucks and the destination
         distance = []
         factory_agents = self.factory_agents(world)
@@ -79,12 +90,22 @@ class Scenario(object):
             '''
             obesrvation of factories
             '''
+            # Get the storage of product
             product_storage = []
             for factory_product in agent.product.index:
                 product_storage.append(agent.contriner.loc[factory_product,'storage'])
+            # Get the storage of the material
             material_storage = []
-
-        
+            material_index = agent.get_material()
+            for tmp_material in material_index:
+                material_storage.append(agent.contriner.loc[tmp_material,'storage'])
+            # Get the number of trucks at current factories
+            truck_num = 0
+            for truck_agent in truck_agents:
+                if truck_agent.destination == agent.id:
+                    truck_num += 1
+            
+            return np.concatenate([product_storage] + [material_storage] + truck_num)
 
 
         
