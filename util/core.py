@@ -75,7 +75,7 @@ class Truck(object):
         self.destination = destination
 
 
-    def refresh_state(self,time_step, repair_flag) -> dict:
+    def refresh_state(self) -> dict:
         '''
         get current state, refresh state
         '''
@@ -353,15 +353,85 @@ class Factory(object):
             material.extend(i)
         return material
 
+class product_management(object):
+    '''
+    product new product, load cargo, etc.
+    '''
+    def __init__(self, factory:list, truck:list) -> None:
+        '''
+        Input the list of factories and the trucks
+        Producding order:
+        Factory0: produce P1
+        Facotry1: produce P2, P12
+        Factory2: produce P3, P23, A(P123)
+        Factory3: produce P4, B(P234)
+        '''
+        self.factory = factory
+        self.truck = truck
+        self.p = np.array([1.0, 1.0, 1.0, 1.0, truck[0].capacity])
+        # Create the dictionary for product
+        # self.product_idx = {tmp_factory.id:tmp_factory.product.index.values.tolist() for tmp_factory in self.factory}
+        self.product_idx = {'Factory0':['P1'],'Factory1':['P12','P2'],'Factory2':['P23'],'Factory3':[]}
+        self.transport_idx = {'P1':'Factory1',
+                              'P2':'Factory2','P12':'Factory2',
+                              'P23':'Factory3'}
+    
+    def produce_load(self) -> None:
+        '''
+        Produce new product in all factories
+        '''
+
+        for tmp_factory in self.factory:
+            tmp_factory.produce_product()
+            for tmp_truck in self.truck:
+                tmp_factory.unload_cargo(tmp_truck)
+            # Start loading the product to truck.
+            # Only when the product is enough to full the truck
+            tmp_product = self.product_idx[tmp_factory.id]
+            truck_pool = [truck for truck in self.truck if truck.position == tmp_factory.id and truck.state == 'waitting']
+
+            # Continue loading
+            truck_continue = [truck for truck in self.truck if truck.position == tmp_factory.id and truck.state == 'loading']
+            for tmp_truck in truck_continue:
+                if tmp_truck.position == tmp_factory.id:
+                    tmp_result = tmp_factory.load_cargo(tmp_truck,tmp_truck.product)
+                    if tmp_result == 'full':
+                        # print(f'[delievery] {tmp_truck.id} delivers the {tmp_truck.product}')
+                        tmp_truck.delivery(self.transport_idx[tmp_truck.product])
+            
+            # for item in tmp_product:
+                # print(item not in truck_duplicate)
+            truck_duplicate = [truck.product for truck in self.truck if truck.position == tmp_factory.id and truck.state == 'loading']
+            if len(tmp_product) == 2:
+                # loading the product with max storage
+                item = self.factory[2].container.loc[tmp_product,'storage'].idxmin()
+                item_bak = [i for i in tmp_product if i != item][0]
+                if (tmp_factory.container.loc[item,'storage'] > self.truck[0].capacity) and (item not in truck_duplicate) and (len(truck_pool)>0):
+                    tmp_result = tmp_factory.load_cargo(truck_pool[0],item)
+                elif (tmp_factory.container.loc[item_bak,'storage'] > self.truck[0].capacity) and (item_bak not in truck_duplicate) and (len(truck_pool)>0):
+                    tmp_result = tmp_factory.load_cargo(truck_pool[0],item_bak)
+
+            elif len(tmp_product) == 1:
+                item = tmp_product[0]
+                if (tmp_factory.container.loc[item,'storage'] > self.truck[0].capacity) and (item not in truck_duplicate) and (len(truck_pool)>0):
+                    tmp_result = tmp_factory.load_cargo(truck_pool[0],item)
+
 class World(object):
     def __init__(self):
         # list of agents 
         self.agents = []
+        # factory load/product manager
+        self.manager = []
         
     
     def step(self):
         '''
-        update the 
+        update the world
         '''
-        self.agents = []
-        
+        traci.simulationStep()
+        for agent in self.agents:
+            # Refresh the state of the truck
+            if agent.truck:
+                agent.refresh_state()
+
+        self.manager.produce_load()
