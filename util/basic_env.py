@@ -10,6 +10,8 @@ class MultiAgentEnv(gym.Env):
         
         self.world = world
         self.agents = self.world.agents
+
+        self.n = len(world.agents)
         # scenario callbacks
         self.reset_callback = reset_callback
         self.reward_callback = reward_callback
@@ -43,7 +45,46 @@ class MultiAgentEnv(gym.Env):
         info_n = {'n':[]}
         # operable agent
         self.agents = self.world.agents
+        for i, agent in enumerate(self.agents):
+            self._set_action(action_n[i], agent)
+        self.world.step()
+        for agent in self.agents:
+            obs_n.append(self._get_obs)
+            reward_n.append(self._get_reward)
+            done_n.append(self._get_done)
+
+            info_n['n'].append(self._get_info)
 
     
-    def _set_action(self, action, agent, action_space):
-        
+    def _set_action(self, action, agent):
+        factory_agents = self.world.factory_agents()
+        if agent.truck:
+            target_id = factory_agents[action].id
+            agent.delivery(destination=target_id)
+        else:
+            agent.req_truck = True if action == 1 else False
+
+    # get observation for a particular agent
+    def _get_obs(self, agent):
+        if self.observation_callback is None:
+            return np.zeros(0)
+        return self.observation_callback(agent, self.world)
+    
+    def _get_reward(self, agent):
+        if self.reward_callback is None:
+            return 0.0
+        return self.reward_callback(agent, self.world)
+    
+    # get dones for a particular agent
+    def _get_done(self, agent):
+        if self.done_callback is None:
+            return False
+        return self.done_callback(agent, self.world)
+    
+
+    # get info used for benchmarking
+    def _get_info(self, agent):
+        if self.info_callback is None:
+            return {}
+        return self.info_callback(agent, self.world)
+    
