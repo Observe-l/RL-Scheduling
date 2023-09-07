@@ -30,13 +30,13 @@ class MultiAgentEnv(gym.Env):
                 # need truck or not
                 tmp_action_space = spaces.Discrete(2)
             total_action_space.append(tmp_action_space)
-            act_space = MultiDiscrete([[0, act_space.n - 1] for act_space in total_action_space])
+            # act_space = MultiDiscrete([[0, act_space.n - 1] for act_space in total_action_space])
 
-            self.action_space.append(act_space)
+            self.action_space.append(tmp_action_space)
 
             # observation space
             obs_dim = len(observation_callback(agent, self.world))
-            self.observation_space.append(spaces.Box(low=0, high=+np.inf, shape=(obs_dim),dtype=np.float32))
+            self.observation_space.append(spaces.Box(low=0, high=+np.inf, shape=(obs_dim,),dtype=np.float32))
     
     def step(self, action_n):
         obs_n = []
@@ -47,15 +47,29 @@ class MultiAgentEnv(gym.Env):
         self.agents = self.world.agents
         for i, agent in enumerate(self.agents):
             self._set_action(action_n[i], agent)
-        self.world.step()
+        # 500 seconds SUMO time
+        for _ in range(500):
+            self.world.step()
         for agent in self.agents:
             obs_n.append(self._get_obs)
             reward_n.append(self._get_reward)
             done_n.append(self._get_done)
 
             info_n['n'].append(self._get_info)
+        
+        return obs_n, reward_n, done_n, info_n
 
-    
+
+    def reset(self):
+        self.reset_callback(self.world)
+
+        obs_n = []
+        self.agents = self.world.agents
+        for agent in self.agents:
+            obs_n.append(self._get_obs(agent))
+        
+        return obs_n
+
     def _set_action(self, action, agent):
         factory_agents = self.world.factory_agents()
         if agent.truck:

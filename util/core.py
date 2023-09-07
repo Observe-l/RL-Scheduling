@@ -222,7 +222,7 @@ class Truck(object):
     
     def get_distance(self, positon) -> float:
         traci.vehicle.changeTarget(vehID=self.id, edgeID=positon)
-        distance = traci.vehicle.getDrivingDistance(vehID=self.id, edgeID=positon, position=positon)
+        distance = traci.vehicle.getDrivingDistance(vehID=self.id, edgeID=positon, pos=0)
         traci.vehicle.changeTarget(vehID=self.id, edgeID=self.destination)
 
         return distance

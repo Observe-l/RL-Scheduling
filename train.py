@@ -4,6 +4,9 @@ import tensorflow as tf
 import time
 import pickle
 
+from util.basic_scenerio import Scenario
+from util.basic_env import MultiAgentEnv
+
 import maddpg.common.tf_util as U
 from maddpg.trainer.maddpg import MADDPGAgentTrainer
 import tensorflow.contrib.layers as layers
@@ -46,11 +49,9 @@ def mlp_model(input, num_outputs, scope, reuse=False, num_units=64, rnn_cell=Non
         return out
 
 def make_env():
-    from .util.basic_scenerio import Scenario
-    from .util.basic_env import MultiAgentEnv
 
     # load scenario from script
-    scenario = Scenario
+    scenario = Scenario()
     # create world
     world = scenario.make_world()
     env = MultiAgentEnv(world, scenario.reset_world, scenario.reward, scenario.observation)
