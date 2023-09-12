@@ -435,3 +435,27 @@ class World(object):
                 agent.refresh_state()
 
         self.manager.produce_load()
+    
+    def resume_truck(self):
+        '''
+        resume all truck from parking area to get the distance
+        '''
+        for agent in self.agents:
+            if agent.truck:
+                try:
+                    traci.vehicle.resume(vehID=agent.id)
+                except:
+                    pass
+        
+        traci.simulationStep()
+    
+    def park_truck(self):
+        '''
+        put all truck back to the parking area
+        '''
+        for agent in self.agents:
+            if agent.truck:
+                try:
+                    traci.vehicle.setParkingAreaStop(vehID=agent.id, stopID=agent.destination)
+                except:
+                    pass

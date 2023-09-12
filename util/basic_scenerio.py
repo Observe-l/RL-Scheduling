@@ -101,7 +101,7 @@ class Scenario(object):
             truck_agents = self.truck_agents(world)
             for other in truck_agents:
                 if other is agent: continue
-                com_destination.append(other.get_destination)
+                com_destination.append(other.get_destination())
             return np.concatenate([distance] + [com_destination])
         else:
             '''

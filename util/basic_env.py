@@ -50,12 +50,16 @@ class MultiAgentEnv(gym.Env):
         # 500 seconds SUMO time
         for _ in range(500):
             self.world.step()
+        
+        self.world.resume_truck()
         for agent in self.agents:
             obs_n.append(self._get_obs)
             reward_n.append(self._get_reward)
             done_n.append(self._get_done)
 
             info_n['n'].append(self._get_info)
+        
+        self.world.park_truck()
         
         return obs_n, reward_n, done_n, info_n
 
@@ -65,9 +69,13 @@ class MultiAgentEnv(gym.Env):
 
         obs_n = []
         self.agents = self.world.agents
+
+        self.world.resume_truck()
         for agent in self.agents:
             obs_n.append(self._get_obs(agent))
         
+        self.world.park_truck()
+
         return obs_n
 
     def _set_action(self, action, agent):
