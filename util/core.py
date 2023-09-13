@@ -436,6 +436,12 @@ class World(object):
 
         self.manager.produce_load()
     
+    def truck_agents(self):
+        return [agent for agent in self.agents if agent.truck]
+    
+    def factory_agents(self):
+        return [agent for agent in self.agents if not agent.truck]
+    
     def resume_truck(self):
         '''
         resume all truck from parking area to get the distance
@@ -459,3 +465,5 @@ class World(object):
                     traci.vehicle.setParkingAreaStop(vehID=agent.id, stopID=agent.destination)
                 except:
                     pass
+        
+        traci.simulationStep(5)

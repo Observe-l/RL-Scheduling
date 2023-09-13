@@ -25,10 +25,10 @@ class Scenario(object):
         world.agents.append(Factory(factory_id='Factory2', produce_rate=[['P3',5,None,None],['P23',2.5,'P2,P3','1,1'],['A',2.5,'P12,P3','1,1']]))
         world.agents.append(Factory(factory_id='Factory3', produce_rate=[['P4',5,None,None],['B',2.5,'P23,P4','1,1']]))
 
-        world.manager = product_management(self.factory_agents(world), self.truck_agents(world))
+        world.manager = product_management(world.factory_agents(), world.truck_agents())
         for _ in range(300):
             traci.simulationStep()
-            tmp_state = [tmp_truck.refresh_state() for tmp_truck in self.truck_agents(world)]
+            tmp_state = [tmp_truck.refresh_state() for tmp_truck in world.truck_agents()]
 
         return world
     
@@ -44,7 +44,7 @@ class Scenario(object):
         
         for _ in range(300):
             traci.simulationStep()
-            tmp_state = [tmp_truck.refresh_state() for tmp_truck in self.truck_agents(world)]
+            tmp_state = [tmp_truck.refresh_state() for tmp_truck in world.truck_agents()]
 
     def reward(self,agent,world) -> float:
         '''
@@ -68,12 +68,6 @@ class Scenario(object):
         '''
         rew = 0
     
-    def truck_agents(self, world) -> list:
-        return [agent for agent in world.agents if agent.truck]
-
-    def factory_agents(self,world) -> list:
-        return [agent for agent in world.agents if not agent.truck]
-    
     def observation(self, agent, world):
         '''
         The observation of trucks and factories.
@@ -86,8 +80,8 @@ class Scenario(object):
         '''
         # The distance between trucks and the destination
         distance = []
-        factory_agents = self.factory_agents(world)
-        truck_agents = self.truck_agents(world)
+        factory_agents = world.factory_agents()
+        truck_agents = world.truck_agents()
         if agent.truck:
             '''
             observation of trucks
@@ -98,7 +92,7 @@ class Scenario(object):
 
             # Comunicate with other trucks, get their action.
             com_destination = []
-            truck_agents = self.truck_agents(world)
+            # truck_agents = world.truck_agents()
             for other in truck_agents:
                 if other is agent: continue
                 com_destination.append(other.get_destination())

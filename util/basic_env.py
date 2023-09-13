@@ -81,10 +81,10 @@ class MultiAgentEnv(gym.Env):
     def _set_action(self, action, agent):
         factory_agents = self.world.factory_agents()
         if agent.truck:
-            target_id = factory_agents[action].id
+            target_id = factory_agents[int(np.where(action==1)[0])].id
             agent.delivery(destination=target_id)
         else:
-            agent.req_truck = True if action == 1 else False
+            agent.req_truck = True if action[0] > 0.5 else False
 
     # get observation for a particular agent
     def _get_obs(self, agent):
