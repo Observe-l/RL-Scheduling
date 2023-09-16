@@ -50,7 +50,10 @@ class Scenario(object):
         '''
         Reward of both trcuks or factories
         '''
-        main_reward = self.truck_reward(agent, world)
+        if agent.truck:
+            main_reward = self.truck_reward(agent, world)
+        else:
+            main_reward = self.factory_reward(agent,world)
         return main_reward
 
         
@@ -63,7 +66,7 @@ class Scenario(object):
         rew = agent.total_product - agent.last_transport
         return rew
     
-    def factory_reward(self, ageng, world) -> float:
+    def factory_reward(self, agent, world) -> float:
         '''
         '''
         rew = 0

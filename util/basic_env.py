@@ -53,11 +53,11 @@ class MultiAgentEnv(gym.Env):
         
         self.world.resume_truck()
         for agent in self.agents:
-            obs_n.append(self._get_obs)
-            reward_n.append(self._get_reward)
-            done_n.append(self._get_done)
+            obs_n.append(self._get_obs(agent))
+            reward_n.append(self._get_reward(agent))
+            done_n.append(self._get_done(agent))
 
-            info_n['n'].append(self._get_info)
+            info_n['n'].append(self._get_info(agent))
         
         self.world.park_truck()
         

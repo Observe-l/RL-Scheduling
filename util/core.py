@@ -173,7 +173,10 @@ class Truck(object):
         self.destination = destination
         traci.vehicle.changeTarget(vehID=self.id, edgeID=destination)
         # Move out the car parking area
-        traci.vehicle.resume(vehID=self.id)
+        try:
+            traci.vehicle.resume(vehID=self.id)
+        except:
+            pass
         # Stop at next parking area
         traci.vehicle.setParkingAreaStop(vehID=self.id, stopID=self.destination)
         #print(f'[move] {self.id} move from {self.position} to {self.destination}')
