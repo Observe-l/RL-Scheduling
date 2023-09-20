@@ -70,6 +70,15 @@ class Scenario(object):
         The reward depends on the waitting time and the number of product transported during last time step
         '''
         rew = agent.total_product - agent.last_transport
+
+        # Check the state of the factory
+        factory_agents = world.factory_agents()
+        for factory_agent in factory_agents:
+            if agent.destination == factory_agent.id:
+                if factory_agent.req_truck is False:
+                    rew -= 10
+                break
+
         return rew
     
     def factory_reward(self, agent, world) -> float:
@@ -99,8 +108,13 @@ class Scenario(object):
             '''
             observation of trucks
             '''
+            # Communicate with factory
+            com_factory = []
+
             for factory_agent in factory_agents:
                 distance.append(agent.get_distance(factory_agent.id))
+                tmp_req = 1 if factory_agent.req_truck is True else 0
+                com_factory.append(com_factory)
             state = agent.get_truck_state()
 
             # Comunicate with other trucks, get their action.
@@ -109,13 +123,8 @@ class Scenario(object):
             for other in truck_agents:
                 if other is agent: continue
                 com_destination.append(other.get_destination())
-            
-            com_distance = []
-            for other in truck_agents:
-                if other is agent: continue
-                for factory_agent in factory_agents:
-                    com_distance.append(other.get_distance(factory_agent.id))
-            return np.concatenate([distance] + [com_destination]+[[com_distance]])
+
+            return np.concatenate([distance] + [com_destination]+[[com_factory]])
         else:
             '''
             obesrvation of factories
