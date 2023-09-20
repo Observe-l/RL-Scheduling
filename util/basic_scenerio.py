@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import traci
+from csv import writer
 from .core import Truck, Factory, World, product_management
 
 class Scenario(object):
@@ -54,6 +55,12 @@ class Scenario(object):
             main_reward = self.truck_reward(agent, world)
         else:
             main_reward = self.factory_reward(agent,world)
+        
+        # Save reward
+        with open(agent.id+'.txt','a') as f:
+            f_csv = writer(f)
+            f_csv.writerow([traci.simulation.getTime(),main_reward])
+
         return main_reward
 
         

@@ -3,7 +3,7 @@ import numpy as np
 import tensorflow as tf
 import time
 import pickle
-import traci
+from csv import writer
 
 from util.basic_scenerio import Scenario
 from util.basic_env import MultiAgentEnv
@@ -104,6 +104,11 @@ def train(arglist):
         train_step = 0
         t_start = time.time()
 
+        # Init result file
+        with open('result.txt','a') as f:
+            f_csv = writer(f)
+            f_csv.writerow(['episode_step','reward'])
+
         print('Starting iterations...')
         while True:
             # get action
@@ -112,6 +117,8 @@ def train(arglist):
             print(obs_n[0])
             # environment step
             new_obs_n, rew_n, done_n, info_n = env.step(action_n)
+
+
             episode_step += 1
             done = all(done_n)
             terminal = (episode_step >= arglist.max_episode_len)
@@ -134,18 +141,6 @@ def train(arglist):
 
             # increment global step counter
             train_step += 1
-
-            # for benchmarking learned policies
-            if arglist.benchmark:
-                for i, info in enumerate(info_n):
-                    agent_info[-1][i].append(info_n['n'])
-                if train_step > arglist.benchmark_iters and (done or terminal):
-                    file_name = arglist.benchmark_dir + arglist.exp_name + '.pkl'
-                    print('Finished benchmarking, now saving...')
-                    with open(file_name, 'wb') as fp:
-                        pickle.dump(agent_info[:-1], fp)
-                    break
-                continue
 
             # update all trainers, if not in display or benchmark mode
             loss = None
