@@ -317,7 +317,7 @@ class Factory(object):
             item_num = max(item_num, 0)
 
             # Update the reward for factory agent
-            self.step_produced_num += item_num
+            # self.step_produced_num += item_num
 
             tmp_materials = row['material']
             if type(tmp_materials) == str:
@@ -333,6 +333,9 @@ class Factory(object):
                     # Produce new product
                     self.container.at[index,'storage'] = self.container.loc[index,'storage'] + item_num
                     self.product.at[index,'total'] = self.product.loc[index,'total'] + item_num
+
+                    # Only record the product which need raw materials
+                    self.step_produced_num += item_num
 
                     
 

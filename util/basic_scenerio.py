@@ -109,7 +109,13 @@ class Scenario(object):
             for other in truck_agents:
                 if other is agent: continue
                 com_destination.append(other.get_destination())
-            return np.concatenate([distance] + [com_destination]+[[state]])
+            
+            com_distance = []
+            for other in truck_agents:
+                if other is agent: continue
+                for factory_agent in factory_agents:
+                    com_distance.append(other.get_distance(factory_agent.id))
+            return np.concatenate([distance] + [com_destination]+[[com_distance]])
         else:
             '''
             obesrvation of factories
