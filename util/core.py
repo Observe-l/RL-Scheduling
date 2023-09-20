@@ -178,7 +178,21 @@ class Truck(object):
         except:
             pass
         # Stop at next parking area
-        traci.vehicle.setParkingAreaStop(vehID=self.id, stopID=self.destination)
+        try:
+            traci.vehicle.setParkingAreaStop(vehID=self.id, stopID=self.destination)
+        except:
+            try:
+                # print(f'{self.id}, position:{self.position}, destination:{self.destination}, parking: {traci.vehicle.getStops(vehID=self.id)}, state: {self.state}')
+                # print(f'weight: {self.weight}, mdp state: {self.mk_state}')
+                traci.vehicle.remove(vehID=self.id)
+            except:
+                # print(f'{self.id} has been deleted')
+                # print(f'weight: {self.weight}, mdp state: {self.mk_state}')
+                pass
+            traci.vehicle.add(vehID=self.id,routeID=self.destination + '_to_'+ self.destination, typeID='truck')
+            traci.vehicle.setParkingAreaStop(vehID=self.id,stopID=self.destination)
+            traci.vehicle.setColor(typeID=self.id,color=self.color)
+
         #print(f'[move] {self.id} move from {self.position} to {self.destination}')
 
     def load_cargo(self, weight:float, product:str) -> tuple:
@@ -271,6 +285,9 @@ class Factory(object):
         self.container.at['P2','capacity'] = 2*capacity
         self.reset()
 
+        # The number of pruduced component during last time step
+        self.step_produced_num = 0
+
         # There two dimension of action: 1) Need trucks or not; 2) The number of new trucks
         self.req_truck = False
         self.req_num = 0
@@ -298,6 +315,10 @@ class Factory(object):
             # Storage shouldn't exceed capacity
             item_num = min(tmp_rate,self.container.loc[index,'capacity'] - self.container.loc[index,'storage'])
             item_num = max(item_num, 0)
+
+            # Update the reward for factory agent
+            self.step_produced_num += item_num
+
             tmp_materials = row['material']
             if type(tmp_materials) == str:
                 tmp_materials = tmp_materials.split(',')
@@ -312,6 +333,8 @@ class Factory(object):
                     # Produce new product
                     self.container.at[index,'storage'] = self.container.loc[index,'storage'] + item_num
                     self.product.at[index,'total'] = self.product.loc[index,'total'] + item_num
+
+                    
 
             # no need any materials
             else:
@@ -468,5 +491,5 @@ class World(object):
                     traci.vehicle.setParkingAreaStop(vehID=agent.id, stopID=agent.destination)
                 except:
                     pass
-        
-        traci.simulationStep(5)
+        for _ in range(5):
+            traci.simulationStep()

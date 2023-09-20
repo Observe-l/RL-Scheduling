@@ -3,6 +3,7 @@ import numpy as np
 import tensorflow as tf
 import time
 import pickle
+import traci
 
 from util.basic_scenerio import Scenario
 from util.basic_env import MultiAgentEnv
@@ -15,8 +16,8 @@ def parse_args():
     parser = argparse.ArgumentParser("Reinforcement Learning experiments for multiagent environments")
     # Environment
     parser.add_argument("--scenario", type=str, default="simple", help="name of the scenario script")
-    parser.add_argument("--max-episode-len", type=int, default=25, help="maximum episode length")
-    parser.add_argument("--num-episodes", type=int, default=25000, help="number of episodes")
+    parser.add_argument("--max-episode-len", type=int, default=1000, help="maximum episode length")
+    parser.add_argument("--num-episodes", type=int, default=25, help="number of episodes")
     parser.add_argument("--num-adversaries", type=int, default=0, help="number of adversaries")
     parser.add_argument("--good-policy", type=str, default="maddpg", help="policy for good agents")
     parser.add_argument("--adv-policy", type=str, default="maddpg", help="policy of adversaries")
@@ -107,7 +108,8 @@ def train(arglist):
         while True:
             # get action
             action_n = [agent.action(obs) for agent, obs in zip(trainers,obs_n)]
-            # print(action_n)
+            # print(action_n[0])
+            print(obs_n[0])
             # environment step
             new_obs_n, rew_n, done_n, info_n = env.step(action_n)
             episode_step += 1
@@ -143,12 +145,6 @@ def train(arglist):
                     with open(file_name, 'wb') as fp:
                         pickle.dump(agent_info[:-1], fp)
                     break
-                continue
-
-            # for displaying learned policies
-            if arglist.display:
-                time.sleep(0.1)
-                env.render()
                 continue
 
             # update all trainers, if not in display or benchmark mode

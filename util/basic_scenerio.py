@@ -11,7 +11,7 @@ class Scenario(object):
             print('restart sumo')
         except:
             pass
-        traci.start(["sumo", "-c", "map/3km_1week/osm.sumocfg","--threads","20"])
+        traci.start(["sumo", "-c", "map/3km_1week/osm.sumocfg","--threads","20","--no-warnings","True"])
 
         world = World()
 
@@ -38,7 +38,7 @@ class Scenario(object):
             print('restart sumo')
         except:
             pass
-        traci.start(["sumo", "-c", "map/3km_1week/osm.sumocfg","--threads","20"])
+        traci.start(["sumo", "-c", "map/3km_1week/osm.sumocfg","--threads","20","--no-warnings","True"])
         for agent in world.agents:
             agent.reset()
         
@@ -62,14 +62,17 @@ class Scenario(object):
         Calculate reward for the given truck agent.
         The reward depends on the waitting time and the number of product transported during last time step
         '''
-        rew = 0
         rew = agent.total_product - agent.last_transport
         return rew
     
     def factory_reward(self, agent, world) -> float:
         '''
+        Read the reward from factory agent.
+        Set it to 0 after reading.
         '''
-        rew = 0
+        rew = agent.step_produced_num
+        agent.step_produced_num = 0
+        return rew
     
     def observation(self, agent, world):
         '''
@@ -99,7 +102,7 @@ class Scenario(object):
             for other in truck_agents:
                 if other is agent: continue
                 com_destination.append(other.get_destination())
-            return np.concatenate([distance] + [com_destination])
+            return np.concatenate([distance] + [com_destination]+[[state]])
         else:
             '''
             obesrvation of factories
@@ -121,14 +124,3 @@ class Scenario(object):
             
             return np.concatenate([product_storage] + [material_storage] + [[truck_num]])
 
-
-        
-
-
-    # def set_action(self, actions, agents):
-    #     '''
-    #     Set action for the agent, both Factories and Trucks.
-    #     First, factory take action, and then, trucks take action.
-    #     '''
-    #     # Set action for factory
-    #     for 
