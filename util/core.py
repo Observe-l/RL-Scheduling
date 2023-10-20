@@ -11,7 +11,7 @@ class Truck(object):
     Parameters: truck ID, health, position, destination ...
     Function: updata health, move to some positon, fix or broken ...
     '''
-    def __init__(self, truck_id:str = 'truck_0', capacity:float = 2.0, weight:float = 0.0,\
+    def __init__(self, truck_id:str = 'truck_0', capacity:float = 5.0, weight:float = 0.0,\
                  state:str = 'delivery', position:str = 'Factory0', destination:str = 'Factory0', product:str = 'A',\
                  path:str = 'result') -> None:
         '''
@@ -355,8 +355,8 @@ class Factory(object):
             # if truck.state == 'waitting':
                 # print when startting loading
                 # print(f'[loading] {truck.id} start loading {product} at:{self.id}')
-            # Maximum loading speed: 0.05 t/s
-            load_weight = min(0.05, self.container.loc[product,'storage'])
+            # Maximum loading speed: 0.5 t/s
+            load_weight = min(0.5, self.container.loc[product,'storage'])
             truck_state, exceed_cargo =  truck.load_cargo(weight=load_weight, product= product)
             self.container.at[product,'storage'] = self.container.loc[product,'storage'] - (load_weight - exceed_cargo)
             return truck_state
@@ -369,8 +369,8 @@ class Factory(object):
             # if truck.state == 'pending for unloading':
                 # print when startting unloading
                 # print(f'[unloading] {truck.id} start unloading {truck.product} at:{self.id}')
-            # Maximum loading speed: 0.05 t/s
-            unload_weight = min(0.05, self.container.loc[truck.product,'capacity'] - self.container.loc[truck.product,'storage'])
+            # Maximum loading speed: 0.5 t/s
+            unload_weight = min(0.5, self.container.loc[truck.product,'capacity'] - self.container.loc[truck.product,'storage'])
             truck_state, exceed_cargo = truck.unload_cargo(unload_weight)
             self.container.at[truck.product,'storage'] = self.container.loc[truck.product,'storage'] + (unload_weight - exceed_cargo)
         

@@ -104,11 +104,6 @@ def train(arglist):
         train_step = 0
         t_start = time.time()
 
-        # Init result file
-        with open('result.txt','a') as f:
-            f_csv = writer(f)
-            f_csv.writerow(['episode_step','reward'])
-
         print('Starting iterations...')
         while True:
             # get action
