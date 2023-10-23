@@ -83,11 +83,46 @@ class Scenario(object):
     def factory_reward(self, agent, world) -> float:
         '''
         Read the reward from factory agent.
-        Set it to 0 after reading.
         '''
-        rew = agent.step_produced_num
-        agent.step_produced_num = 0
+        # Short-term reward 1: change of production num
+        rew_current_trans = 1 * agent.step_transport
+
+        # Short-term reward 2: change of transported product in next factory
+        rew_next_fac_comp = agent.step_emergency_product
+
+        # Get shared Long-term reward
+        long_rew = self.shared_reward(world)
+
+        # Get penalty when factory run out of material
+        
+
+        
+        rew = rew_current_trans + rew_next_fac_comp + long_rew
         return rew
+    
+    def shared_reward(self, world) -> float:
+        '''
+        Long-term shared reward
+        '''
+        shared_rew = 0
+        rew_trans = 0
+        rew_product = 0
+
+        # Reward 1: Total transportated product during last time step
+        # P1 = 20
+        for truck_agent in world.truck_agents():
+            # rewrite, problem
+            rew_trans += 20 * truck_agent.total_product - truck_agent.last_transport
+
+        # Reward 2: Number of final product
+        # P2 = 20
+        for factory_agent in world.factory_agents():
+            rew_product += 20 * factory_agent.step_final_product
+        
+
+        shared_rew = rew_trans + rew_product
+        return shared_rew
+
     
     def observation(self, agent, world):
         '''

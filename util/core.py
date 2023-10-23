@@ -287,6 +287,11 @@ class Factory(object):
 
         # The number of pruduced component during last time step
         self.step_produced_num = 0
+        self.step_final_product = 0
+        # The number of decreased component during last time step
+        self.step_transport = 0
+        self.step_emergency_product = 0
+        # The penalty, when
 
         # There two dimension of action: 1) Need trucks or not; 2) The number of new trucks
         self.req_truck = False
@@ -336,6 +341,7 @@ class Factory(object):
 
                     # Only record the product which need raw materials
                     self.step_produced_num += item_num
+                    self.step_final_product += self.container.loc['A','storage'] + self.container.loc['B','storage']
 
                     
 
@@ -359,6 +365,7 @@ class Factory(object):
             load_weight = min(0.5, self.container.loc[product,'storage'])
             truck_state, exceed_cargo =  truck.load_cargo(weight=load_weight, product= product)
             self.container.at[product,'storage'] = self.container.loc[product,'storage'] - (load_weight - exceed_cargo)
+            self.step_transport += load_weight - exceed_cargo
             return truck_state
     
     def unload_cargo(self, truck:Truck) -> None:
@@ -370,9 +377,14 @@ class Factory(object):
                 # print when startting unloading
                 # print(f'[unloading] {truck.id} start unloading {truck.product} at:{self.id}')
             # Maximum loading speed: 0.5 t/s
+            if self.container.loc[truck.product,'storage'] <= 2000:
+                emergency_par = 3
+            else:
+                emergency_par = 1
             unload_weight = min(0.5, self.container.loc[truck.product,'capacity'] - self.container.loc[truck.product,'storage'])
             truck_state, exceed_cargo = truck.unload_cargo(unload_weight)
             self.container.at[truck.product,'storage'] = self.container.loc[truck.product,'storage'] + (unload_weight - exceed_cargo)
+            self.step_emergency_product += emergency_par * (unload_weight - exceed_cargo)
         
     def get_material(self) -> list:
         tmp_material = list(filter(lambda item: item is not None,self.product['material'].values.tolist()))
