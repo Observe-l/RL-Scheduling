@@ -261,7 +261,11 @@ class Factory(object):
     The class of factory
     '''
     def __init__(self, factory_id:str = 'Factory0', produce_rate:list = [['P1',0.0001,None,None]], 
-                 capacity:float=800.0, container:list = ['P1','P2','P3','P4','P12','P23','A','B']) -> None:
+                 container:list = ['P1','P2','P3','P4','P12','P23','A','B'],
+                 product_source:dict = {'P1':'Factory0',
+                                        'P2':'Factory1', 'P12':'Factory1',
+                                        'P3':'Factory2', 'P23':'Factory2','A':'Factory2',
+                                        'P4':'Factory3', 'B':'Factory3'}) -> None:
         '''
         Parameters:
         factory_id: string
@@ -272,17 +276,15 @@ class Factory(object):
         self.id = factory_id
         self.truck = False
 
-        self.produce_rate = produce_rate
-        self.container = container
-
         # Create a dataframe to record the products which are produced in current factory
-        self.product= pd.DataFrame(self.produce_rate,columns=['product','rate','material','ratio'])
-        self.product['total'] = [0.0] * len(self.produce_rate)
+        self.product= pd.DataFrame(produce_rate,columns=['product','rate','material','ratio'])
+        self.product['total'] = [0.0] * len(produce_rate)
         self.product.set_index(['product'],inplace=True)
         # The dataframe of the container
-        self.container = pd.DataFrame({'product':self.container, 'storage':[0.0]*len(self.container), 'capacity':[capacity] * 4 + [60000] * 4})
+        self.container = pd.DataFrame({'product':container, 'storage':[0.0]*len(container), 'capacity':[60000] * len(container)})
+        self.container['source'] = self.container['product'].map(product_source)
         self.container.set_index(['product'],inplace=True)
-        self.container.at['P2','capacity'] = 2*capacity
+        # self.container.at['P2','capacity'] = 2*capacity
         self.reset()
 
         # The number of pruduced component during last time step
@@ -290,8 +292,9 @@ class Factory(object):
         self.step_final_product = 0
         # The number of decreased component during last time step
         self.step_transport = 0
-        self.step_emergency_product = 0
-        # The penalty, when
+        self.step_emergency_product = {'Factory0':0, 'Factory1':0, 'Factory2':0, 'Factory3':0}
+        # The penalty, when run out of material
+        self.penalty = {'Factory0':0, 'Factory1':0, 'Factory2':0, 'Factory3':0}
 
         # There two dimension of action: 1) Need trucks or not; 2) The number of new trucks
         self.req_truck = False
@@ -305,7 +308,7 @@ class Factory(object):
         '''
         Set total storage and total producd to 0
         '''
-        self.product['total'] = [0.0] * len(self.produce_rate)
+        self.product['total'] = [0.0] * len(self.product)
         self.container['storage'] = [0.0]*len(self.container)
 
     
@@ -330,6 +333,13 @@ class Factory(object):
                 tmp_ratio = np.array(row['ratio'].split(','),dtype=np.float64)
 
                 tmp_storage = self.container.loc[tmp_materials,'storage'].to_numpy()
+
+                # Calculate Penalty. If the raw material, give a penalty
+                for remain_material, single_ratio in zip(tmp_materials,tmp_ratio):
+                    if self.container.loc[remain_material,'storage'] <= single_ratio*tmp_rate:
+                        tmp_source_factory = self.container.loc[remain_material,'source']
+                        self.penalty[tmp_source_factory] -= 0.5
+
                 # Check storage
                 if (tmp_storage > tmp_ratio*tmp_rate).all() and self.container.loc[index,'capacity'] > self.container.loc[index,'storage']:
                     # Consume the material
@@ -384,7 +394,8 @@ class Factory(object):
             unload_weight = min(0.5, self.container.loc[truck.product,'capacity'] - self.container.loc[truck.product,'storage'])
             truck_state, exceed_cargo = truck.unload_cargo(unload_weight)
             self.container.at[truck.product,'storage'] = self.container.loc[truck.product,'storage'] + (unload_weight - exceed_cargo)
-            self.step_emergency_product += emergency_par * (unload_weight - exceed_cargo)
+            product_source = self.container.loc[truck.product,'source']
+            self.step_emergency_product[product_source] += emergency_par * (unload_weight - exceed_cargo)
         
     def get_material(self) -> list:
         tmp_material = list(filter(lambda item: item is not None,self.product['material'].values.tolist()))
@@ -508,3 +519,14 @@ class World(object):
                     pass
         for _ in range(5):
             traci.simulationStep()
+    
+    def flag_reset(self):
+        for factory_agent in self.factory_agents():
+            # The number of pruduced component during last time step
+            self.step_produced_num = 0
+            self.step_final_product = 0
+            # The number of decreased component during last time step
+            self.step_transport = 0
+            self.step_emergency_product = {'Factory0':0, 'Factory1':0, 'Factory2':0, 'Factory3':0}
+            # The penalty, when run out of material
+            self.penalty = {'Factory0':0, 'Factory1':0, 'Factory2':0, 'Factory3':0}

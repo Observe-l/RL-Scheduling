@@ -60,6 +60,7 @@ class MultiAgentEnv(gym.Env):
             info_n['n'].append(self._get_info(agent))
         
         self.world.park_truck()
+        self.world.flag_reset()
         
         return obs_n, reward_n, done_n, info_n
 
@@ -81,11 +82,12 @@ class MultiAgentEnv(gym.Env):
     def _set_action(self, action, agent):
         factory_agents = self.world.factory_agents()
         if agent.truck:
-            try:
-                target_id = factory_agents[int(np.where(action==1)[0])].id
-            except:
-                print(agent.id, action)
-                target_id = factory_agents[int(np.where(action==1)[0])].id
+            # try:
+            #     target_id = factory_agents[int(np.where(action==1)[0])].id
+            # except:
+            #     print(agent.id, action)
+            #     target_id = factory_agents[int(np.where(action==1)[0])].id
+            target_id = factory_agents[np.argmax(action)].id
             agent.delivery(destination=target_id)
         else:
             agent.req_truck = True if action[0] > 0.5 else False

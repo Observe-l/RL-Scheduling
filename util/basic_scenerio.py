@@ -1,7 +1,6 @@
 import numpy as np
 import pandas as pd
 import traci
-from csv import writer
 from .core import Truck, Factory, World, product_management
 
 class Scenario(object):
@@ -55,11 +54,6 @@ class Scenario(object):
             main_reward = self.truck_reward(agent, world)
         else:
             main_reward = self.factory_reward(agent,world)
-        
-        # Save reward
-        with open(agent.id+'.txt','a') as f:
-            f_csv = writer(f)
-            f_csv.writerow([traci.simulation.getTime(),main_reward])
 
         return main_reward
 
@@ -69,15 +63,30 @@ class Scenario(object):
         Calculate reward for the given truck agent.
         The reward depends on the waitting time and the number of product transported during last time step
         '''
-        rew = agent.total_product - agent.last_transport
 
-        # Check the state of the factory
-        factory_agents = world.factory_agents()
-        for factory_agent in factory_agents:
-            if agent.destination == factory_agent.id:
-                if factory_agent.req_truck is False:
-                    rew -= 10
-                break
+        # Short-term reward 1: change of transported product in next factory
+        rew_1 = 0
+        penalty = 0
+        for factory_agent in world.factory_agents():
+            rew_1 += factory_agent.step_emergency_product[agent.destination]
+
+            # Penalty: going to wrong factory
+            if agent.destination == factory_agent.id and factory_agent.req_truck is False:
+                penalty = -10
+
+        
+        # Short-term reward 2: depends on the distance of between trucks and the destination
+        distance = agent.get_distance(agent.destination)
+        if distance < 0:
+            distance = 0
+        # Normalize the distance (min-max scale), assume maximum distance is 5000
+        norm_distance = distance / 5000
+        rew_2 = -10 * np.log(norm_distance)
+
+        # Get shared Long-term reward
+        long_rew = self.shared_reward(world)
+        
+        rew = rew_1 + rew_2 + penalty  + long_rew
         return rew
     
     def factory_reward(self, agent, world) -> float:
@@ -85,19 +94,19 @@ class Scenario(object):
         Read the reward from factory agent.
         '''
         # Short-term reward 1: change of production num
-        rew_current_trans = 1 * agent.step_transport
+        rew_1 = 1 * agent.step_transport
 
         # Short-term reward 2: change of transported product in next factory
-        rew_next_fac_comp = agent.step_emergency_product
-
+        # Penalty: when the factory run out of material
+        rew_2 = 0
+        peanlty = 0
+        for factory_agent in world.factory_agents():
+            rew_2 += factory_agent.step_emergency_product[agent.id]
+            peanlty += factory_agent.penalty[agent.id]
         # Get shared Long-term reward
         long_rew = self.shared_reward(world)
 
-        # Get penalty when factory run out of material
-        
-
-        
-        rew = rew_current_trans + rew_next_fac_comp + long_rew
+        rew = rew_1 + rew_2 + long_rew + peanlty
         return rew
     
     def shared_reward(self, world) -> float:
@@ -148,10 +157,13 @@ class Scenario(object):
             com_factory_action = []
 
             for factory_agent in factory_agents:
-                # Observation 1: distance to 4 factories
-                distance.append(agent.get_distance(factory_agent.id))
+                # Observation 1: distance to 4 factories, [0,+inf]
+                tmp_distance = agent.get_distance(factory_agent.id)
+                if tmp_distance < 0:
+                    tmp_distance = 0
+                distance.append(tmp_distance)
                 for truck_agent in truck_agents:
-                    if truck_agent.destination == agent.id:
+                    if truck_agent.destination == factory_agent.id:
                         tmp_truck_num += 1
                 # Observation 2: number of trucks that driving to each factory
                 com_truck_num.append(tmp_truck_num)
@@ -162,7 +174,7 @@ class Scenario(object):
             # Observation 4: The state of the truck
             state = agent.get_truck_state()
 
-            return np.concatenate([distance] + [[com_truck_num] + [com_factory_action] + [[state]]])
+            return np.concatenate([distance] + [com_truck_num] + [com_factory_action] + [[state]])
         
         else:
             '''

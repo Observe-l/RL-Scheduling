@@ -82,7 +82,7 @@ def train(arglist):
         num_adversaries = min(env.n, arglist.num_adversaries)
         trainers = get_trainers(env, num_adversaries, obs_shape_n, arglist)
         print('Using good policy {} and adv policy {}'.format(arglist.good_policy, arglist.adv_policy))
-
+        print('trainer number: ', len(trainers))
         # Initialize
         U.initialize()
 
@@ -100,6 +100,7 @@ def train(arglist):
         agent_info = [[[]]]  # placeholder for benchmarking info
         saver = tf.train.Saver()
         obs_n = env.reset()
+        print(len(obs_n))
         episode_step = 0
         train_step = 0
         t_start = time.time()
