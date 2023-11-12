@@ -39,6 +39,9 @@ class Truck(object):
         self.total_product = 0.0
         self.last_transport = 0.0
 
+        # The operable flag
+        self.operable_flag = True
+
         self.path = path + '/truck_record.csv'
     
     def reset(self,weight:float = 0.0, state:str = 'delivery', position:str = 'Factory0', destination:str = 'Factory0', product:str = 'A'):
@@ -100,6 +103,7 @@ class Truck(object):
             parking_state = tmp_pk[-1]
 
         self.position = parking_state.stoppingPlaceID
+        self.operable_flag = False
         
         if parking_state.arrival < 0:
             self.state = 'delivery'
@@ -109,6 +113,7 @@ class Truck(object):
             self.state = 'pending for unloading'
         elif self.weight == 0:
             self.state = 'waitting'
+            self.operable_flag = True
 
         return {'state':self.state, 'postion':self.position}
 
@@ -169,6 +174,7 @@ class Truck(object):
         delevery the cargo to another factory
         '''
         self.state = 'delivery'
+        self.operable_flag = False
         # Remove vehicle first, add another truck. (If we want to use the dijkstra algorithm in SUMO, we must creat new vehicle)
         self.destination = destination
         traci.vehicle.changeTarget(vehID=self.id, edgeID=destination)

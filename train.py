@@ -100,7 +100,6 @@ def train(arglist):
         agent_info = [[[]]]  # placeholder for benchmarking info
         saver = tf.train.Saver()
         obs_n = env.reset()
-        print(len(obs_n))
         episode_step = 0
         train_step = 0
         t_start = time.time()

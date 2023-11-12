@@ -2,6 +2,7 @@ import gym
 from gym import spaces
 import numpy as np
 from .multi_discrete import MultiDiscrete
+import traci
 
 class MultiAgentEnv(gym.Env):
     def __init__(self, world, reset_callback=None, reward_callback=None,
@@ -82,13 +83,14 @@ class MultiAgentEnv(gym.Env):
     def _set_action(self, action, agent):
         factory_agents = self.world.factory_agents()
         if agent.truck:
-            # try:
-            #     target_id = factory_agents[int(np.where(action==1)[0])].id
-            # except:
-            #     print(agent.id, action)
-            #     target_id = factory_agents[int(np.where(action==1)[0])].id
             target_id = factory_agents[np.argmax(action)].id
-            agent.delivery(destination=target_id)
+            if agent.operable_flag:
+                # tmp_pk = traci.vehicle.getStops(vehID=agent.id)[-1]
+                # print("take action, agent id: {}, the destination is: {} \nThe parking state is: {}".format(agent.id, target_id, tmp_pk))
+                agent.delivery(destination=target_id)
+            else:
+                # print("No action, agent id: {}".format(agent.id))
+                pass
         else:
             agent.req_truck = True if action[0] > 0.5 else False
 

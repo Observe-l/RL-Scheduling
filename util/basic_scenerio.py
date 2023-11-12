@@ -38,7 +38,7 @@ class Scenario(object):
             print('restart sumo')
         except:
             pass
-        traci.start(["sumo", "-c", "map/3km_1week/osm.sumocfg","--threads","20","--no-warnings","True"])
+        traci.start(["sumo-gui", "-c", "map/3km_1week/osm.sumocfg","--threads","20","--no-warnings","True"])
         for agent in world.agents:
             agent.reset()
         
