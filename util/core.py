@@ -39,8 +39,6 @@ class Truck(object):
         self.total_product = 0.0
         self.last_transport = 0.0
 
-        # The operable flag
-        self.operable_flag = True
 
         self.path = path + '/truck_record.csv'
     
@@ -58,7 +56,10 @@ class Truck(object):
         self.position = position
         self.destination = destination
         self.product = product
+        # RGBA Green
         self.color = (255,255,0,255)
+        # The operable flag
+        self.operable_flag = False
         self.recover_state = 'waitting'
 
         # record total transported product
@@ -211,13 +212,14 @@ class Truck(object):
         if self.weight + weight < self.capacity:
             self.weight += weight
             self.state = 'loading'
-            # RGBA
+            # RGBA Blue
             self.color = (0,0,255,255)
             traci.vehicle.setColor(typeID=self.id,color=self.color)
             return ('successful', 0.0)
         else:
             self.weight = self.capacity
             self.state = 'pending for delivery'
+            # RGBA Red
             self.color = (255,0,0,255)
             traci.vehicle.setColor(typeID=self.id,color=self.color)
             # After the truck is full, record it
@@ -229,17 +231,19 @@ class Truck(object):
         '''
         Unload cargo. If truck is empty, health become waitting.
         '''
-        self.state = 'unloading'
-        self.color = (0,0,255,255)
-        traci.vehicle.setColor(typeID=self.id,color=self.color)
-        if weight <= self.weight:
+        if weight < self.weight:
+            self.state = 'unloading'
+            # RGBA Blue
+            self.color = (0,0,255,255)
+            traci.vehicle.setColor(typeID=self.id,color=self.color)
             self.weight -= weight
             return ('successful', 0.0)
         else:
             remainning_weight = self.weight
             self.weight =0
             self.state = 'waitting'
-            self.color = (0,255,0,255)
+            # RGBA Green
+            self.color = (255,255,0,255)
             traci.vehicle.setColor(typeID=self.id,color=self.color)
             return ('not enough', remainning_weight)
     

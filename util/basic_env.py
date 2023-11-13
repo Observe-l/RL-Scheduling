@@ -85,11 +85,8 @@ class MultiAgentEnv(gym.Env):
         if agent.truck:
             target_id = factory_agents[np.argmax(action)].id
             if agent.operable_flag:
-                # tmp_pk = traci.vehicle.getStops(vehID=agent.id)[-1]
-                # print("take action, agent id: {}, the destination is: {} \nThe parking state is: {}".format(agent.id, target_id, tmp_pk))
                 agent.delivery(destination=target_id)
             else:
-                # print("No action, agent id: {}".format(agent.id))
                 pass
         else:
             agent.req_truck = True if action[0] > 0.5 else False
