@@ -1,6 +1,8 @@
 import gym
 from gym import spaces
 import numpy as np
+from csv import writer
+from pathlib import Path
 from .multi_discrete import MultiDiscrete
 import traci
 
@@ -22,6 +24,22 @@ class MultiAgentEnv(gym.Env):
 
         self.action_space = []
         self.observation_space = []
+        # Create folder
+        self.path = "/home/lwh/Documents/Code/RL-Scheduling/result/maddpg/"
+        Path(self.path).mkdir(parents=True, exist_ok=True)
+        # Create file
+        self.result_file = self.path + 'result.csv'
+        self.reward_file = []
+        for agent in self.agents:
+            tmp_path = self.path + agent.id + '.csv'
+            with open(tmp_path,'w') as f:
+                f_csv = writer(f)
+                f_csv.writerow(['time','reward','cumulate reward'])
+            self.reward_file.append(tmp_path)
+        with open(self.result_file,'w') as f:
+            f_csv = writer(f)
+            f_csv.writerow(['time','A','B','P12','P23'])
+
         for agent in self.agents:
             total_action_space = []
             if agent.truck:
@@ -62,6 +80,24 @@ class MultiAgentEnv(gym.Env):
         
         self.world.park_truck()
         self.world.flag_reset()
+
+        # Save the results
+        current_time = traci.simulation.getTime()
+        factory_agents = self.world.factory_agents()
+        with open(self.result_file, 'a') as f:
+            f_csv = writer(f)
+            tmp_A = round(factory_agents[2].product.loc['A','total'],3)
+            tmp_B = round(factory_agents[3].product.loc['B','total'],3)
+            tmp_P12 = round(factory_agents[1].product.loc['P12','total'],3)
+            tmp_P23 = round(factory_agents[2].product.loc['P23','total'],3)
+            tmp_time = round(current_time / 3600,3)
+            f_csv.writerow([tmp_time,tmp_A,tmp_B,tmp_P12,tmp_P23])
+        for agent, reward, tmp_file in zip(self.agents, reward_n, self.reward_file):
+            with open(tmp_file,'a') as f:
+                f_csv = writer(f)
+                tmp_time = round(current_time / 3600,3)
+                f_csv.writerow([tmp_time, reward, agent.cumulate_reward])
+
         
         return obs_n, reward_n, done_n, info_n
 

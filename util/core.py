@@ -12,8 +12,7 @@ class Truck(object):
     Function: updata health, move to some positon, fix or broken ...
     '''
     def __init__(self, truck_id:str = 'truck_0', capacity:float = 5.0, weight:float = 0.0,\
-                 state:str = 'delivery', position:str = 'Factory0', destination:str = 'Factory0', product:str = 'A',\
-                 path:str = 'result') -> None:
+                 state:str = 'delivery', position:str = 'Factory0', destination:str = 'Factory0', product:str = 'A') -> None:
         '''
         Parameters:
         truck_id: string
@@ -32,15 +31,12 @@ class Truck(object):
         self.reset(weight,state,position,destination,product)
 
         self.capacity = capacity
-
+        # Number of transported item during last time step
+        # self.
         # sumo time
         self.time_step = 0
-        # record total transported product
-        self.total_product = 0.0
-        self.last_transport = 0.0
-
-
-        self.path = path + '/truck_record.csv'
+        # Record the reward
+        self.cumulate_reward = 0.0
     
     def reset(self,weight:float = 0.0, state:str = 'delivery', position:str = 'Factory0', destination:str = 'Factory0', product:str = 'A'):
         # Create truck in sumo. If the truck already exist, remove it first
@@ -312,6 +308,8 @@ class Factory(object):
         # The number of trucks which desitination is current factory or stop at current factory
         self.truck_num = 0
 
+        self.cumulate_reward = 0.0
+
         self.step = 0
 
     def reset(self) -> None:
@@ -510,10 +508,15 @@ class World(object):
         '''
         for agent in self.agents:
             if agent.truck:
-                try:
-                    traci.vehicle.resume(vehID=agent.id)
-                except:
-                    pass
+                tmp_pk = traci.vehicle.getStops(vehID=agent.id)
+                if len(tmp_pk) > 0:
+                    latest_pk = tmp_pk[0]
+                    if latest_pk.arrival > 0:
+                        traci.vehicle.resume(vehID=agent.id)
+                # try:
+                #     traci.vehicle.resume(vehID=agent.id)
+                # except:
+                #     pass
         
         traci.simulationStep()
     

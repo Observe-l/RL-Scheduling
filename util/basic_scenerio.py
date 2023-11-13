@@ -54,7 +54,8 @@ class Scenario(object):
             main_reward = self.truck_reward(agent, world)
         else:
             main_reward = self.factory_reward(agent,world)
-
+        
+        agent.cumulate_reward += main_reward
         return main_reward
 
         
@@ -78,7 +79,7 @@ class Scenario(object):
         # Short-term reward 2: depends on the distance of between trucks and the destination
         distance = agent.get_distance(agent.destination)
         if distance < 0:
-            distance = 0
+            distance = 1
         # Normalize the distance (min-max scale), assume maximum distance is 5000
         norm_distance = distance / 5000
         rew_2 = -10 * np.log(norm_distance)
@@ -121,14 +122,15 @@ class Scenario(object):
         # P1 = 20
         for truck_agent in world.truck_agents():
             # rewrite, problem
-            rew_trans += 20 * truck_agent.total_product - truck_agent.last_transport
+            rew_trans += 10 * (truck_agent.total_product - truck_agent.last_transport)
 
         # Reward 2: Number of final product
         # P2 = 20
         for factory_agent in world.factory_agents():
-            rew_product += 20 * factory_agent.step_final_product
+            rew_product += 10 * factory_agent.step_final_product
         
-
+        # rew_trans = 0
+        rew_product = 0
         shared_rew = rew_trans + rew_product
         return shared_rew
 
