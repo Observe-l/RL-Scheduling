@@ -44,7 +44,7 @@ class MultiAgentEnv(gym.Env):
             total_action_space = []
             if agent.truck:
                 # number of factory, the truck's new destination
-                tmp_action_space = spaces.Discrete(4)
+                tmp_action_space = spaces.Discrete(3)
             else:
                 # need truck or not
                 tmp_action_space = spaces.Discrete(2)
@@ -83,7 +83,7 @@ class MultiAgentEnv(gym.Env):
 
         # Save the results
         current_time = traci.simulation.getTime()
-        factory_agents = self.world.factory_agents()
+        factory_agents = self.world.manager.factory
         with open(self.result_file, 'a') as f:
             f_csv = writer(f)
             tmp_A = round(factory_agents[2].product.loc['A','total'],3)
@@ -126,6 +126,7 @@ class MultiAgentEnv(gym.Env):
                 pass
         else:
             agent.req_truck = True if action[0] > 0.5 else False
+            # print("Factory id:{}, action number:{}, action:{}".format(agent.id, action[0], agent.req_truck))
 
     # get observation for a particular agent
     def _get_obs(self, agent):

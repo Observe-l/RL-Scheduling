@@ -16,6 +16,7 @@ class Scenario(object):
         world = World()
 
         # add agents, 12 trucks, 4 factories
+        # 12 Truck agents, 3 factories agents
         num_trucks = 12
         num_factories = 4
         world.agents = [Truck(truck_id='truck_'+str(i)) for i in range(num_trucks)]
@@ -26,6 +27,7 @@ class Scenario(object):
         world.agents.append(Factory(factory_id='Factory3', produce_rate=[['P4',5,None,None],['B',2.5,'P23,P4','1,1']]))
 
         world.manager = product_management(world.factory_agents(), world.truck_agents())
+        world.agents.pop()
         for _ in range(300):
             traci.simulationStep()
             tmp_state = [tmp_truck.refresh_state() for tmp_truck in world.truck_agents()]
@@ -65,49 +67,51 @@ class Scenario(object):
         The reward depends on the waitting time and the number of product transported during last time step
         '''
 
-        # Short-term reward 1: change of transported product in next factory
+        # Short-term reward 1: change of transported product in next factory 0~100
         rew_1 = 0
         penalty = 0
-        for factory_agent in world.factory_agents():
+        for factory_agent in world.manager.factory:
             rew_1 += factory_agent.step_emergency_product[agent.destination]
 
             # Penalty: going to wrong factory
             if agent.destination == factory_agent.id and factory_agent.req_truck is False:
-                penalty = -10
+                penalty = -100
 
         
-        # Short-term reward 2: depends on the distance of between trucks and the destination
+        # Short-term reward 2: depends on the distance of between trucks and the destination 0~8
         distance = agent.get_distance(agent.destination)
         if distance < 0:
             distance = 1
         # Normalize the distance (min-max scale), assume maximum distance is 5000
         norm_distance = distance / 5000
-        rew_2 = -10 * np.log(norm_distance)
+        rew_2 = -3 * np.log(norm_distance)
 
         # Get shared Long-term reward
         long_rew = self.shared_reward(world)
         
         rew = rew_1 + rew_2 + penalty  + long_rew
+        print("rew: {} ,rew_1: {} ,rew_2: {} ,penalty: {} ,long_rew: {}".format(rew,rew_1,rew_2,penalty,long_rew))
         return rew
     
     def factory_reward(self, agent, world) -> float:
         '''
         Read the reward from factory agent.
         '''
-        # Short-term reward 1: change of production num
+        # Short-term reward 1: change of production num 0~20
         rew_1 = 1 * agent.step_transport
 
-        # Short-term reward 2: change of transported product in next factory
-        # Penalty: when the factory run out of material
+        # Short-term reward 2: change of transported product in next factory, 0~100
+        # Penalty: when the factory run out of material, 0~50
         rew_2 = 0
-        peanlty = 0
-        for factory_agent in world.factory_agents():
+        penalty = 0
+        for factory_agent in world.manager.factory:
             rew_2 += factory_agent.step_emergency_product[agent.id]
-            peanlty += factory_agent.penalty[agent.id]
+            penalty += factory_agent.penalty[agent.id]
         # Get shared Long-term reward
         long_rew = self.shared_reward(world)
 
-        rew = rew_1 + rew_2 + long_rew + peanlty
+        rew = rew_1 + rew_2 + long_rew + penalty
+
         return rew
     
     def shared_reward(self, world) -> float:
@@ -118,19 +122,12 @@ class Scenario(object):
         rew_trans = 0
         rew_product = 0
 
-        # Reward 1: Total transportated product during last time step
-        # P1 = 20
-        for truck_agent in world.truck_agents():
-            # rewrite, problem
-            rew_trans += 10 * (truck_agent.total_product - truck_agent.last_transport)
-
-        # Reward 2: Number of final product
-        # P2 = 20
-        for factory_agent in world.factory_agents():
-            rew_product += 10 * factory_agent.step_final_product
-        
-        # rew_trans = 0
-        rew_product = 0
+        # Reward 1: Total transportated product during last time step, 0-50
+        # Reward 2: Number of final product 0-50
+        # P1=1, P2=10
+        for factory_agent in world.manager.factory:
+            rew_trans +=  1 * factory_agent.step_transport
+            rew_product += 1 * factory_agent.step_final_product
         shared_rew = rew_trans + rew_product
         return shared_rew
 
@@ -159,7 +156,7 @@ class Scenario(object):
             com_factory_action = []
 
             for factory_agent in factory_agents:
-                # Observation 1: distance to 4 factories, [0,+inf]
+                # Observation 1: distance to 3 factories, [0,+inf]
                 tmp_distance = agent.get_distance(factory_agent.id)
                 if tmp_distance < 0:
                     tmp_distance = 0
@@ -173,6 +170,12 @@ class Scenario(object):
                 # Observation 3: the action of factory agent
                 tmp_factory_action = 1 if factory_agent.req_truck is True else 0
                 com_factory_action.append(tmp_factory_action)
+            # Observation 2: Factory 4 truck number
+            for truck_agent in truck_agents:
+                if truck_agent.destination == 'Factory3':
+                    tmp_truck_num += 1
+            com_truck_num.append(tmp_truck_num)
+            tmp_truck_num = 0
             # Observation 4: The state of the truck
             state = agent.get_truck_state()
 

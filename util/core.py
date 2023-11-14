@@ -31,8 +31,7 @@ class Truck(object):
         self.reset(weight,state,position,destination,product)
 
         self.capacity = capacity
-        # Number of transported item during last time step
-        # self.
+
         # sumo time
         self.time_step = 0
         # Record the reward
@@ -346,7 +345,7 @@ class Factory(object):
                 for remain_material, single_ratio in zip(tmp_materials,tmp_ratio):
                     if self.container.loc[remain_material,'storage'] <= single_ratio*tmp_rate:
                         tmp_source_factory = self.container.loc[remain_material,'source']
-                        self.penalty[tmp_source_factory] -= 0.5
+                        self.penalty[tmp_source_factory] -= 0.05
 
                 # Check storage
                 if (tmp_storage > tmp_ratio*tmp_rate).all() and self.container.loc[index,'capacity'] > self.container.loc[index,'storage']:
@@ -359,9 +358,8 @@ class Factory(object):
 
                     # Only record the product which need raw materials
                     self.step_produced_num += item_num
-                    self.step_final_product += self.container.loc['A','storage'] + self.container.loc['B','storage']
-
-                    
+                    if index == 'A' or index == 'B':
+                        self.step_final_product += item_num
 
             # no need any materials
             else:
@@ -534,12 +532,12 @@ class World(object):
             traci.simulationStep()
     
     def flag_reset(self):
-        for factory_agent in self.factory_agents():
+        for factory_agent in self.manager.factory:
             # The number of pruduced component during last time step
-            self.step_produced_num = 0
-            self.step_final_product = 0
+            factory_agent.step_produced_num = 0
+            factory_agent.step_final_product = 0
             # The number of decreased component during last time step
-            self.step_transport = 0
-            self.step_emergency_product = {'Factory0':0, 'Factory1':0, 'Factory2':0, 'Factory3':0}
+            factory_agent.step_transport = 0
+            factory_agent.step_emergency_product = {'Factory0':0, 'Factory1':0, 'Factory2':0, 'Factory3':0}
             # The penalty, when run out of material
-            self.penalty = {'Factory0':0, 'Factory1':0, 'Factory2':0, 'Factory3':0}
+            factory_agent.penalty = {'Factory0':0, 'Factory1':0, 'Factory2':0, 'Factory3':0}
