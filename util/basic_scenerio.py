@@ -90,7 +90,7 @@ class Scenario(object):
         long_rew = self.shared_reward(world)
         
         rew = rew_1 + rew_2 + penalty  + long_rew
-        print("rew: {} ,rew_1: {} ,rew_2: {} ,penalty: {} ,long_rew: {}".format(rew,rew_1,rew_2,penalty,long_rew))
+        # print("rew: {} ,rew_1: {} ,rew_2: {} ,penalty: {} ,long_rew: {}".format(rew,rew_1,rew_2,penalty,long_rew))
         return rew
     
     def factory_reward(self, agent, world) -> float:
@@ -103,15 +103,28 @@ class Scenario(object):
         # Short-term reward 2: change of transported product in next factory, 0~100
         # Penalty: when the factory run out of material, 0~50
         rew_2 = 0
-        penalty = 0
+        penalty_1 = 0
         for factory_agent in world.manager.factory:
             rew_2 += factory_agent.step_emergency_product[agent.id]
-            penalty += factory_agent.penalty[agent.id]
+            penalty_1 += 2 * factory_agent.penalty[agent.id]
+        
+        # penalty: if more than half trucks in same factory, and factory still ask for new truck
+        penalty_2 = 0
+        truck_agents = world.truck_agents()
+        tmp_truck_num = 0
+        for truck_agent in truck_agents:
+            if truck_agent.destination == agent.id:
+                tmp_truck_num += 1
+        
+        if tmp_truck_num >= 0.5 * len(truck_agents) and agent.req_truck:
+            penalty_2 = -200
+
+
         # Get shared Long-term reward
         long_rew = self.shared_reward(world)
 
-        rew = rew_1 + rew_2 + long_rew + penalty
-
+        rew = rew_1 + rew_2 + long_rew + penalty_1 + penalty_2
+        print("rew: {} ,rew_1: {} ,rew_2: {} ,penalty_1: {} ,penalty_2: {} ,long_rew: {}".format(rew,rew_1,rew_2,penalty_1,penalty_2,long_rew))
         return rew
     
     def shared_reward(self, world) -> float:
@@ -127,7 +140,7 @@ class Scenario(object):
         # P1=1, P2=10
         for factory_agent in world.manager.factory:
             rew_trans +=  1 * factory_agent.step_transport
-            rew_product += 1 * factory_agent.step_final_product
+            rew_product += 4 * factory_agent.step_final_product
         shared_rew = rew_trans + rew_product
         return shared_rew
 
