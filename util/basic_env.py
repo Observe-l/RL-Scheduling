@@ -24,21 +24,7 @@ class MultiAgentEnv(gym.Env):
 
         self.action_space = []
         self.observation_space = []
-        # Create folder
-        self.path = "/home/lwh/Documents/Code/RL-Scheduling/result/maddpg/"
-        Path(self.path).mkdir(parents=True, exist_ok=True)
-        # Create file
-        self.result_file = self.path + 'result.csv'
-        self.reward_file = []
-        for agent in self.agents:
-            tmp_path = self.path + agent.id + '.csv'
-            with open(tmp_path,'w') as f:
-                f_csv = writer(f)
-                f_csv.writerow(['time','reward','cumulate reward'])
-            self.reward_file.append(tmp_path)
-        with open(self.result_file,'w') as f:
-            f_csv = writer(f)
-            f_csv.writerow(['time','A','B','P12','P23'])
+        self.episode = 0
 
         for agent in self.agents:
             total_action_space = []
@@ -98,7 +84,9 @@ class MultiAgentEnv(gym.Env):
                 tmp_time = round(current_time / 3600,3)
                 f_csv.writerow([tmp_time, reward, agent.cumulate_reward])
 
-        
+        if current_time >= 3600 * 24 * 3:
+            done_n = [True] * len(self.agents)
+
         return obs_n, reward_n, done_n, info_n
 
 
@@ -113,8 +101,26 @@ class MultiAgentEnv(gym.Env):
             obs_n.append(self._get_obs(agent))
         
         self.world.park_truck()
+        self.make_folder()
 
         return obs_n
+    
+    def make_folder(self):
+        # Create folder
+        self.path = "/home/lwh/Documents/Code/RL-Scheduling/result/maddpg/{}/".format(self.episode)
+        Path(self.path).mkdir(parents=True, exist_ok=True)
+        # Create file
+        self.result_file = self.path + 'result.csv'
+        self.reward_file = []
+        for agent in self.agents:
+            tmp_path = self.path + agent.id + '.csv'
+            with open(tmp_path,'w') as f:
+                f_csv = writer(f)
+                f_csv.writerow(['time','reward','cumulate reward'])
+            self.reward_file.append(tmp_path)
+        with open(self.result_file,'w') as f:
+            f_csv = writer(f)
+            f_csv.writerow(['time','A','B','P12','P23'])
 
     def _set_action(self, action, agent):
         factory_agents = self.world.factory_agents()

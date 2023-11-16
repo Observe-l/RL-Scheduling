@@ -31,11 +31,6 @@ class Truck(object):
         self.reset(weight,state,position,destination,product)
 
         self.capacity = capacity
-
-        # sumo time
-        self.time_step = 0
-        # Record the reward
-        self.cumulate_reward = 0.0
     
     def reset(self,weight:float = 0.0, state:str = 'delivery', position:str = 'Factory0', destination:str = 'Factory0', product:str = 'A'):
         # Create truck in sumo. If the truck already exist, remove it first
@@ -60,6 +55,10 @@ class Truck(object):
         # record total transported product
         self.total_product = 0.0
         self.last_transport = 0.0
+        # sumo time
+        self.time_step = 0
+        # Record the reward
+        self.cumulate_reward = 0.0
 
     def update_truck(self, capacity:float = 10000.0, weight:float = 0.0,\
                      state:str = 'delivery', position:str = 'Factory0', destination:str = 'Factory0') -> None:
@@ -317,6 +316,7 @@ class Factory(object):
         '''
         self.product['total'] = [0.0] * len(self.product)
         self.container['storage'] = [0.0]*len(self.container)
+        self.cumulate_reward = 0.0
 
     
     def produce_product(self) -> None:

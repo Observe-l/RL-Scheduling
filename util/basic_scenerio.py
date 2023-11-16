@@ -43,6 +43,8 @@ class Scenario(object):
         traci.start(["sumo", "-c", "map/3km_1week/osm.sumocfg","--threads","20","--no-warnings","True"])
         for agent in world.agents:
             agent.reset()
+        for factory in world.manager.factory:
+            factory.reset()
         
         for _ in range(300):
             traci.simulationStep()
