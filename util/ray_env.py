@@ -21,8 +21,8 @@ class Simple_Scheduling(MultiAgentEnv):
         obs = self._get_obs()
         for agent_id, tmp_obs in obs.items():
             obs_dim = len(tmp_obs)
-            self.observation_space[agent_id] = Box(low=0, high=+np.inf, shape=(obs_dim,),dtype=np.float32)
-            if 'truck' in agent_id:
+            self.observation_space[agent_id] = Box(low=0, high=10000, shape=(obs_dim,),dtype=np.float32)
+            if agent_id < self.truck_num:
                 self.action_space[agent_id] = Discrete(3)
             else:
                 self.action_space[agent_id] = Discrete(2)
@@ -97,6 +97,8 @@ class Simple_Scheduling(MultiAgentEnv):
         Return back a dictionary for both truck and factory agents
         '''
         observation = {}
+        # The agent id. must be integer, start from 0
+        agent_id = 0
         # The truck agents' observation
         for truck_agent in self.truck_agents:
             distance = []
@@ -125,7 +127,9 @@ class Simple_Scheduling(MultiAgentEnv):
             # Observation 4: The state of the truck
             state = truck_agent.get_truck_state()
             # Store the observation in the dictionary
-            observation[truck_agent.id] = np.concatenate([distance] + [com_truck_num] + [com_factory_action] + [[state]])
+            observation[agent_id] = np.concatenate([distance] + [com_truck_num] + [com_factory_action] + [[state]])
+
+            agent_id += 1
         
         # The factory agents' observation
         for factory_agent in self.factory_agents:
@@ -143,7 +147,9 @@ class Simple_Scheduling(MultiAgentEnv):
             for tmp_truck in self.truck_agents:
                 if tmp_truck.destination == factory_agent.id:
                     truck_num += 1
-            observation[factory_agent.id] = np.concatenate([product_storage] + [material_storage] + [[truck_num]])
+            observation[agent_id] = np.concatenate([product_storage] + [material_storage] + [[truck_num]])
+
+            agent_id += 1
         
         return observation
     
@@ -152,7 +158,7 @@ class Simple_Scheduling(MultiAgentEnv):
         Set action for all the agent
         '''
         for agent_id, action in actions.items():
-            if 'truck' in agent_id:
+            if agent_id < self.truck_num:
                 agent = self.truck_agents[agent_id]
                 target_id = self.factory_agents[action].id
                 if agent.operable_flag:
@@ -160,17 +166,21 @@ class Simple_Scheduling(MultiAgentEnv):
                 else:
                     pass
             else:
-                self.factory_agents[agent_id].req_truck = True if action==1 else False
+                self.factory_agents[agent_id-self.truck_num].req_truck = True if action==1 else False
     
     def _get_reward(self) -> dict:
         '''
         Get reward for all agents
         '''
         rew = {}
+        # The agent id. must be integer, start from 0
+        agent_id = 0
         for tmp_agent in self.truck_agents:
-            rew[tmp_agent.id] = self.truck_reward(tmp_agent)
+            rew[agent_id] = self.truck_reward(tmp_agent)
+            agent_id += 1
         for tmp_agent in self.factory_agents:
-            rew[tmp_agent.id] = self.factory_reward(tmp_agent)
+            rew[agent_id] = self.factory_reward(tmp_agent)
+            agent_id += 1
         return rew
 
     def truck_reward(self, agent) -> float:

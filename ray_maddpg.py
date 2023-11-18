@@ -16,12 +16,22 @@ observation = env.observation_space
 action = env.action_space
 policies = {}
 for agent_id, obs, act, i in zip(observation.keys(), observation.values(),action.values(),range(len(observation))):
-    policies[agent_id] = (None,obs,act,{"agent_id":i})
+    policies[f'{agent_id}'] = (
+                                None,
+                                obs,
+                                act,
+                                {
+                                    "agent_id":i,
+                                    "use_local_critic": False,
+                                    "obs_space_dict":observation,
+                                    "act_space_dict":action,
+                                }
+                            )
 
 env.stop_env()
 
 def policy_mapping_fn(agent_id):
-    return f"{agent_id}"
+    return f'{agent_id}'
 
 if __name__ == "__main__":
     ray.init()
@@ -39,10 +49,9 @@ if __name__ == "__main__":
             "policy_mapping_fn":policy_mapping_fn,
         }
     })
-    ray_dir = "/home/lwh/Documents/Code/RL-Scheduling/ray_train/"
+    ray_dir = "/home/lwh/Documents/Code/RL-Scheduling/train_ray/"
     exp_name = "MADDPG"
     stop = {'episodes_total':2000}
-
     tunner = tune.Tuner(
         MADDPG,
         param_space=config,
