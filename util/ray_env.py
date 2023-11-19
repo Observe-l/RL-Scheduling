@@ -58,6 +58,7 @@ class Simple_Scheduling(MultiAgentEnv):
         self._set_action(action_dict)
         # The SUMO simulation
         for _ in range(500):
+            traci.simulationStep()
             # Refresh truck state
             tmp_state = [tmp_truck.refresh_state() for tmp_truck in self.truck_agents]
             self.manager.produce_load()
@@ -81,7 +82,8 @@ class Simple_Scheduling(MultiAgentEnv):
             tmp_P23 = round(self.factory[2].product.loc['P23','total'],3)
             tmp_time = round(current_time / 3600,3)
             f_csv.writerow([tmp_time,tmp_A,tmp_B,tmp_P12,tmp_P23])
-        for agent, reward, tmp_file in zip(self.truck_agents + self.factory_agents, rewards, self.reward_file):
+        for agent, reward, tmp_file in zip(self.truck_agents + self.factory_agents, rewards.values(), self.reward_file):
+            agent.cumulate_reward += reward
             with open(tmp_file,'a') as f:
                 f_csv = writer(f)
                 tmp_time = round(current_time / 3600,3)
@@ -288,14 +290,14 @@ class Simple_Scheduling(MultiAgentEnv):
         Create folder to save the result
         '''
         # Create folder
-        self.path = self.path + '{}/'.format(self.episode_num)
-        Path(self.path).mkdir(parents=True, exist_ok=True)
+        folder_path = self.path + '{}/'.format(self.episode_num)
+        Path(folder_path.path).mkdir(parents=True, exist_ok=True)
         # Create file
-        self.result_file = self.path + 'result.csv'
+        self.result_file = folder_path + 'result.csv'
         self.reward_file = []
         # Create reward file
         for agent in self.truck_agents + self.factory_agents:
-            tmp_path = self.path + agent.id + '.csv'
+            tmp_path = folder_path + agent.id + '.csv'
             with open(tmp_path,'w') as f:
                 f_csv = writer(f)
                 f_csv.writerow(['time','reward','cumulate reward'])

@@ -38,10 +38,10 @@ if __name__ == "__main__":
         "env": Simple_Scheduling,
         "env_config": {"path":"/home/lwh/Documents/Code/RL-Scheduling/result/ray_ppo/"},
         "disable_env_checking":True,
-        "num_workers": 10,
+        "num_workers": 20,
         "num_envs_per_worker": 1,
-        "num_cpus_per_worker": 3,
-        "num_gpus_per_worker": 1/10,
+        "num_cpus_per_worker": 1.5,
+        "num_gpus_per_worker": 1/20,
         "ignore_worker_failures":True,
         "recreate_failed_workers":True,
         "multiagent":{
