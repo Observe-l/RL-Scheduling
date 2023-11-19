@@ -21,7 +21,7 @@ class Simple_Scheduling(MultiAgentEnv):
         obs = self._get_obs()
         for agent_id, tmp_obs in obs.items():
             obs_dim = len(tmp_obs)
-            self.observation_space[agent_id] = Box(low=0, high=10000, shape=(obs_dim,),dtype=np.float32)
+            self.observation_space[agent_id] = Box(low=0, high=+np.inf, shape=(obs_dim,),dtype=np.float32)
             if agent_id < self.truck_num:
                 self.action_space[agent_id] = Discrete(3)
             else:
@@ -30,7 +30,7 @@ class Simple_Scheduling(MultiAgentEnv):
         self.done = {}
 
         self.episode_num = 0
-        self.path = env_config['path']
+        self.path = env_config['path'] + f'/{env_config.worker_index}'
 
     def reset(self):
         '''
