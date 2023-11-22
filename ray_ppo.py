@@ -38,10 +38,10 @@ if __name__ == "__main__":
         "env": Simple_Scheduling,
         "env_config": {"path":"/home/lwh/Documents/Code/RL-Scheduling/result/ray_ppo/"},
         "disable_env_checking":True,
-        "num_workers": 20,
+        "num_workers": 30,
         "num_envs_per_worker": 1,
-        "num_cpus_per_worker": 1.5,
-        "num_gpus_per_worker": 1/20,
+        "num_cpus_per_worker": 1,
+        "num_gpus_per_worker": 1/30,
         "ignore_worker_failures":True,
         "recreate_failed_workers":True,
         "multiagent":{
@@ -51,11 +51,13 @@ if __name__ == "__main__":
     })
     ray_dir = "/home/lwh/Documents/Code/RL-Scheduling/train_ray/"
     exp_name = "MAPPO"
-    stop = {'episodes_total':2000}
+    stop = {"training_iteration": 30}
     tunner = tune.Tuner(
         PPO,
         param_space=config,
         run_config=air.RunConfig(
+            storage_path=ray_dir,
+            log_to_file=True,
             local_dir=ray_dir,
             name=exp_name,
             stop=stop,

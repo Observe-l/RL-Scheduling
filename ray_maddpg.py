@@ -3,6 +3,7 @@ import os
 from ray import tune, air
 from gym.spaces import Discrete, Box
 from ray.rllib.algorithms.maddpg.maddpg import MADDPGConfig,MADDPG
+from ray.rllib.env.env_context import EnvContext
 from ray.rllib.policy.policy import PolicySpec
 import optparse
 import numpy as np
@@ -10,7 +11,8 @@ import time
 from util.ray_env import Simple_Scheduling
 
 # Define the policies
-env = Simple_Scheduling(env_config={"path":"/home/lwh/Documents/Code/RL-Scheduling/result/ray_maddpg/"})
+env_config = EnvContext(env_config={"path":"/home/lwh/Documents/Code/RL-Scheduling/result/ray_maddpg"},worker_index=0)
+env = Simple_Scheduling(env_config=env_config)
 
 observation = env.observation_space
 action = env.action_space
@@ -51,12 +53,14 @@ if __name__ == "__main__":
     })
     ray_dir = "/home/lwh/Documents/Code/RL-Scheduling/train_ray/"
     exp_name = "MADDPG"
-    stop = {'episodes_total':2000}
+    stop = {'episodes_total':200}
     tunner = tune.Tuner(
         MADDPG,
         param_space=config,
         run_config=air.RunConfig(
+            storage_path=ray_dir,
             local_dir=ray_dir,
+            log_to_file=True,
             name=exp_name,
             stop=stop,
             checkpoint_config=air.CheckpointConfig(
