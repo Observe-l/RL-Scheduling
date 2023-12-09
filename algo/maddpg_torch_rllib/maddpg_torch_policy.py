@@ -1,9 +1,11 @@
 import numpy as np
 import gymnasium as gym
 from gymnasium.spaces import Box, Discrete
-from typing import List, Dict, Union, Optional
+from typing import List, Dict, Type, Union, Optional
 
 from copy import deepcopy
+from ray.rllib.models.modelv2 import ModelV2
+from ray.rllib.models.torch.torch_action_dist import TorchDistributionWrapper
 from ray.rllib.policy.policy import Policy
 from ray.rllib.policy.torch_policy_v2 import TorchPolicyV2
 from ray.rllib.policy.sample_batch import SampleBatch
@@ -19,30 +21,18 @@ from .maddpg_torch_model import MADDPGConfig
 
 torch, nn = try_import_torch()
 
-class MADDPGPostprocessing:
-    """Implements agentwise termination signal and n-step learning."""
 
-    @override(Policy)
-    def postprocess_trajectory(
-        self, sample_batch, other_agent_batches=None, episode=None
-    ):
-        # FIXME: Get done from info is required since agentwise done is not
-        #  supported now.
-        sample_batch[SampleBatch.TERMINATEDS] = self.get_done_from_info(
-            sample_batch[SampleBatch.INFOS]
-        )
-
-        # N-step Q adjustments
-        if self.config["n_step"] > 1:
-            adjust_nstep(self.config["n_step"], self.config["gamma"], sample_batch)
-
-        return sample_batch
-
-
-class MADDPGTorchPolicy(MADDPGPostprocessing, TorchPolicyV2):
+class MADDPGTorchPolicy(TorchPolicyV2):
     def __init__(self, obs_space, act_space, config):
         # _____ Initial Configuration
         self.config = dict(MADDPGConfig().to_dict(), **config)
+        TorchPolicyV2.__init__(
+            self,
+            obs_space,
+            act_space,
+            self.config,
+            max_seq_len=self.config["model"]["max_seq_len"]
+        )
 
         # FIXME: Get done from info is required since agentwise done is not
         #  supported now.
@@ -64,26 +54,6 @@ class MADDPGTorchPolicy(MADDPGPostprocessing, TorchPolicyV2):
                 raise UnsupportedSpaceException(
                     "Space {} is not supported.".format(space)
                 )
-        
-        # Get observation dictionary and actionary dictionary
-        obs_dict = self.config["obs_space_dict"]
-        act_dict = self.config["act_space_dict"]
-        # Make continous space for current agent
-        self.act = _make_continuous_space(act_space)
-        self.obs = _make_continuous_space(obs_space)
-        # Make continous space for all agents
-        self.obs_n = [_make_continuous_space(obs_one) for obs_one in obs_dict.values()]
-        self.act_n = [_make_continuous_space(act_one) for act_one in act_dict.values()]
-
-        # Build critic network and actor network
-        self.critic = _Critic(self.obs_n, self.act_n)
-        self.actor = _Actor(self.obs, self.act)
-
-        # Build the target network
-        self.critic_target = _Critic(self.obs_n, self.act_n)
-        self.actor_target = _Actor(self.obs, self.act)
-
-        # Implement MADDPG using pytorch
 
         class _Critic(nn.Module):
             def __init__(self, obs_n, act_n):
@@ -107,9 +77,6 @@ class MADDPGTorchPolicy(MADDPGPostprocessing, TorchPolicyV2):
 
                 return q_value
 
-
-
-
         class _Actor(nn.Module):
             def __init__(self, obs_space, act_space):
                 super(_Actor, self).__init__()
@@ -127,3 +94,53 @@ class MADDPGTorchPolicy(MADDPGPostprocessing, TorchPolicyV2):
                 x = nn.functional.relu(self.FC3(x))
                 actions = nn.functional.tanh(self.action_out(x))
                 return actions
+        
+        # Get observation dictionary and actionary dictionary
+        obs_dict = self.config["obs_space_dict"]
+        act_dict = self.config["act_space_dict"]
+        # Make continous space for current agent
+        self.act = _make_continuous_space(act_space)
+        self.obs = _make_continuous_space(obs_space)
+        # Make continous space for all agents
+        self.obs_n = [_make_continuous_space(obs_one) for obs_one in obs_dict.values()]
+        self.act_n = [_make_continuous_space(act_one) for act_one in act_dict.values()]
+
+        # Build critic network and actor network
+        self.critic = _Critic(self.obs_n, self.act_n)
+        self.actor = _Actor(self.obs, self.act)
+
+        # Build the target network
+        self.critic_target = _Critic(self.obs_n, self.act_n)
+        self.actor_target = _Actor(self.obs, self.act)
+            
+    @override(TorchPolicyV2)
+    def loss(
+        self, 
+        model: ModelV2, 
+        dist_class: type[TorchDistributionWrapper], 
+        train_batch: SampleBatch
+        ) -> Union[TensorType, List[TensorType]]:
+        # Get batch data
+        state_batch = train_batch[SampleBatch.OBS]
+        actions_batch = train_batch[SampleBatch.ACTIONS]
+        reward_batch = train_batch[SampleBatch.REWARDS]
+
+        next_state_batch = train_batch[SampleBatch.NEXT_OBS]
+        
+        return super().loss(model, dist_class, train_batch)
+
+    @override(TorchPolicyV2)
+    def postprocess_trajectory(
+        self, sample_batch, other_agent_batches=None, episode=None
+    ):
+        # FIXME: Get done from info is required since agentwise done is not
+        #  supported now.
+        sample_batch[SampleBatch.TERMINATEDS] = self.get_done_from_info(
+            sample_batch[SampleBatch.INFOS]
+        )
+
+        # N-step Q adjustments
+        if self.config["n_step"] > 1:
+            adjust_nstep(self.config["n_step"], self.config["gamma"], sample_batch)
+
+        return sample_batch
