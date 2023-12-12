@@ -4,6 +4,7 @@ from gymnasium.spaces import Box, Discrete
 from typing import List, Dict, Type, Union, Optional
 
 from copy import deepcopy
+from ray.rllib.models import ModelCatalog
 from ray.rllib.models.modelv2 import ModelV2
 from ray.rllib.models.torch.torch_action_dist import TorchDistributionWrapper
 from ray.rllib.policy.policy import Policy
@@ -17,7 +18,9 @@ from ray.rllib.utils.framework import try_import_torch
 from ray.rllib.utils.typing import ModelConfigDict, TensorType
 from ray.rllib.utils.error import UnsupportedSpaceException
 from ray.rllib.utils.annotations import override
-from .maddpg_torch_model import MADDPGConfig
+
+from ray.rllib.algorithms.ddpg.noop_model import TorchNoopModel
+from .maddpg_torch_model import MADDPGConfig, MADDPGTorchModel
 
 torch, nn = try_import_torch()
 
@@ -26,13 +29,6 @@ class MADDPGTorchPolicy(TorchPolicyV2):
     def __init__(self, obs_space, act_space, config):
         # _____ Initial Configuration
         self.config = dict(MADDPGConfig().to_dict(), **config)
-        TorchPolicyV2.__init__(
-            self,
-            obs_space,
-            act_space,
-            self.config,
-            max_seq_len=self.config["model"]["max_seq_len"]
-        )
 
         # FIXME: Get done from info is required since agentwise done is not
         #  supported now.
@@ -112,7 +108,66 @@ class MADDPGTorchPolicy(TorchPolicyV2):
         # Build the target network
         self.critic_target = _Critic(self.obs_n, self.act_n)
         self.actor_target = _Actor(self.obs, self.act)
-            
+
+        TorchPolicyV2.__init__(
+            self,
+            obs_space,
+            act_space,
+            self.config,
+            max_seq_len=self.config["model"]["max_seq_len"]
+        )
+
+
+    @override(TorchPolicyV2)
+    def make_model(self) -> ModelV2:
+        self.config["model"]["multiagent"] = self.config["multiagent"] # Needed for critic obs_space and act_space
+        if self.config["use_state_preprocessor"]:
+            default_model = None  # catalog decides
+            num_outputs = 256  # arbitrary
+            self.config["model"]["no_final_linear"] = True
+        else:
+            default_model = TorchNoopModel
+            num_outputs = np.prod(self.obs.shape)
+        model =  ModelCatalog.get_model_v2(
+            obs_space=self.obs,
+            action_space=self.act,
+            num_outputs=num_outputs,
+            model_config=self.config["model"],
+            framework=self.config["framework"],
+            model_interface=MADDPGTorchModel,
+            default_model=default_model,
+            name="maddpg_model",
+            actor_hidden_activation=self.config["actor_hidden_activation"],
+            actor_hiddens=self.config["actor_hiddens"],
+            critic_hidden_activation=self.config["critic_hidden_activation"],
+            critic_hiddens=self.config["critic_hiddens"],
+            twin_q=self.config["twin_q"],
+            add_layer_norm=(
+                self.config["exploration_config"].get("type") == "ParameterNoise"
+            ),
+        )
+
+        self.target_models = ModelCatalog.get_model_v2(
+            obs_space=self.obs,
+            action_space=self.act,
+            num_outputs=num_outputs,
+            model_config=self.config["model"],
+            framework=self.config["framework"],
+            model_interface=MADDPGTorchModel,
+            default_model=default_model,
+            name="target_maddpg_model",
+            actor_hidden_activation=self.config["actor_hidden_activation"],
+            actor_hiddens=self.config["actor_hiddens"],
+            critic_hidden_activation=self.config["critic_hidden_activation"],
+            critic_hiddens=self.config["critic_hiddens"],
+            twin_q=self.config["twin_q"],
+            add_layer_norm=(
+                self.config["exploration_config"].get("type") == "ParameterNoise"
+            ),
+        )
+
+        return model
+
     @override(TorchPolicyV2)
     def loss(
         self, 

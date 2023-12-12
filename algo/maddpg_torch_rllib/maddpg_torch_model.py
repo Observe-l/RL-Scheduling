@@ -1,33 +1,43 @@
-"""Contributed port of MADDPG from OpenAI baselines.
-
-The implementation has a couple assumptions:
-- The number of agents is fixed and known upfront.
-- Each agent is bound to a policy of the same name.
-- Discrete actions are sent as logits (pre-softmax).
-
-For a minimal example, see rllib/examples/two_step_game.py,
-and the README for how to run with the multi-agent particle envs.
-"""
-
 import logging
-from typing import List, Optional, Type
+from typing import Dict, List, Optional, Type, Union
+import numpy as np
+import gymnasium as gym
+from gymnasium.spaces import Box, Discrete
 
 from ray.rllib.algorithms.algorithm_config import AlgorithmConfig, NotProvided
 from ray.rllib.algorithms.dqn.dqn import DQN
-from ray.rllib.algorithms.maddpg.maddpg_tf_policy import MADDPGTFPolicy
+from ray.rllib.models.torch.misc import SlimFC
+from ray.rllib.models.torch.torch_modelv2 import TorchModelV2
+from ray.rllib.models.utils import get_activation_fn
 from ray.rllib.policy.policy import Policy
 from ray.rllib.policy.sample_batch import SampleBatch, MultiAgentBatch
+from ray.rllib.policy.view_requirement import ViewRequirement
 from ray.rllib.utils.annotations import override
+from ray.rllib.utils.error import UnsupportedSpaceException
+from ray.rllib.utils.typing import ModelConfigDict, TensorType
+from ray.rllib.utils.framework import try_import_torch
 from ray.rllib.utils.deprecation import (
     DEPRECATED_VALUE,
     Deprecated,
     ALGO_DEPRECATION_WARNING,
 )
 
+from .maddpg_torch_policy import MADDPGTorchPolicy
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+torch, nn = try_import_torch()
 
+
+def _make_continuous_space(space):
+    if isinstance(space, Box):
+        return space
+    elif isinstance(space, Discrete):
+        return Box(low=np.zeros((space.n,)), high=np.ones((space.n,)))
+    else:
+        raise UnsupportedSpaceException("Space {} is not supported.".format(space))
+    
 class MADDPGConfig(AlgorithmConfig):
     """Defines a configuration class from which a MADDPG Algorithm can be built.
 
@@ -90,6 +100,7 @@ class MADDPGConfig(AlgorithmConfig):
             # Force lockstep replay mode for MADDPG.
             "replay_mode": "lockstep",
         }
+        self.compress_observations = None
         self.training_intensity = None
         self.num_steps_sampled_before_learning_starts = 1024 * 25
         self.critic_lr = 1e-2
@@ -97,24 +108,62 @@ class MADDPGConfig(AlgorithmConfig):
         self.target_network_update_freq = 0
         self.tau = 0.01
         self.actor_feature_reg = 0.001
-        self.grad_norm_clipping = 0.5
+        # self.grad_norm_clipping = 0.5
+        self.grad_clip = 100
 
         # Changes to Algorithm's default:
         self.rollout_fragment_length = 100
         self.train_batch_size = 1024
         self.num_rollout_workers = 1
         self.min_time_s_per_iteration = 0
+        self.min_sample_timesteps_per_iteration = 1000
+
+        # torch-specific model configs
+        self.twin_q = False
+        self.policy_delay = 1
+        self.smooth_target_policy = False
+        self.use_huber = False
+        self.huber_threshold = 1.0
+        self.l2_reg = None
+
+        # self.exploration_config = {
+        #     # The Exploration class to use. In the simplest case, this is the name
+        #     # (str) of any class present in the `rllib.utils.exploration` package.
+        #     # You can also provide the python class directly or the full location
+        #     # of your class (e.g. "ray.rllib.utils.exploration.epsilon_greedy.
+        #     # EpsilonGreedy").
+        #     "type": "StochasticSampling",
+        #     # Add constructor kwargs here (if any).
+        # }
         self.exploration_config = {
-            # The Exploration class to use. In the simplest case, this is the name
-            # (str) of any class present in the `rllib.utils.exploration` package.
-            # You can also provide the python class directly or the full location
-            # of your class (e.g. "ray.rllib.utils.exploration.epsilon_greedy.
-            # EpsilonGreedy").
-            "type": "StochasticSampling",
-            # Add constructor kwargs here (if any).
+            "type": "GaussianNoise",
+            # For how many timesteps should we return completely random actions,
+            # before we start adding (scaled) noise?
+            "random_timesteps": 1000,
+            # The stddev (sigma) to be used for the actions
+            "stddev": 0.5,
+            # The initial noise scaling factor.
+            "initial_scale": 1.0,
+            # The final noise scaling factor.
+            "final_scale": 0.02,
+            # Timesteps over which to anneal scale (from initial to final values).
+            "scale_timesteps": 10000,
         }
+        
         # fmt: on
         # __sphinx_doc_end__
+
+        # === Evaluation ===
+        self.evaluation_interval = None
+        self.evaluation_num_episodes = None
+        self.learn_other_policies = None
+        # Extra configuration that disables exploration.
+        self.evaluation_config = {
+            "explore": False
+        }
+        
+
+
 
     @override(AlgorithmConfig)
     def training(
@@ -295,16 +344,22 @@ def before_learn_on_batch(multi_agent_batch, policies, train_batch_size):
         samples.update(dict(zip(keys, multi_agent_batch.policy_batches[pid].values())))
 
     # Make ops and feed_dict to get "new_obs" from target action sampler.
-    new_obs_ph_n = [p.new_obs_ph for p in policies.values()]
     new_obs_n = list()
+    new_act_n = list()
     for k, v in samples.items():
         if "new_obs" in k:
             new_obs_n.append(v)
 
-    for i, p in enumerate(policies.values()):
-        feed_dict = {new_obs_ph_n[i]: new_obs_n[i]}
-        new_act = p.get_session().run(p.target_act_sampler, feed_dict)
-        samples.update({"new_actions_%d" % i: new_act})
+    def sampler(policy, obs):
+        return policy.compute_actions(obs)[0]
+    
+    new_act_n = [
+        sampler(policy, obs) for policy, obs in zip(policies.values(), new_obs_n)
+    ]
+
+    samples.update(
+        {"new_actions_%d" % i: new_act for i, new_act in enumerate(new_act_n)}
+    )
 
     # Share samples among agents.
     policy_batches = {pid: SampleBatch(samples) for pid in policies.keys()}
@@ -329,4 +384,221 @@ class MADDPG(DQN):
     def get_default_policy_class(
         cls, config: AlgorithmConfig
     ) -> Optional[Type[Policy]]:
-        return MADDPGTFPolicy
+        return MADDPGTorchPolicy
+
+class MADDPGTorchModel(TorchModelV2, nn.Module):
+    """
+    Extension of TorchModelV2 for MADDPG
+    Note that the critic takes in the joint state and action over all agents
+    Data flow:
+        obs -> forward() -> model_out
+        model_out -> get_policy_output() -> pi(s)
+        model_out, actions -> get_q_values() -> Q(s, a)
+        model_out, actions -> get_twin_q_values() -> Q_twin(s, a)
+    Note that this class by itself is not a valid model unless you
+    implement forward() in a subclass.
+    """
+
+    def __init__(
+        self,
+        observation_space: Box,
+        action_space: Box,
+        num_outputs: int,
+        model_config: ModelConfigDict,
+        name: str,
+        # Extra MADDPGActionModel args:
+        actor_hiddens: List[int] = [256, 256],
+        actor_hidden_activation: str = "relu",
+        critic_hiddens: List[int] = [256, 256],
+        critic_hidden_activation: str = "relu",
+        twin_q: bool = False,
+        add_layer_norm: bool = False,
+    ):
+
+        nn.Module.__init__(self)
+        TorchModelV2.__init__(
+            self, observation_space, action_space, num_outputs, model_config, name
+        )
+
+        self.bounded = np.logical_and(self.action_space.bounded_above,
+                                      self.action_space.bounded_below).any()
+        self.action_dim = np.product(self.action_space.shape)
+
+        # Build the policy network.
+        self.policy_model = nn.Sequential()
+        ins = int(np.product(observation_space.shape))
+        self.obs_ins = ins
+        activation = get_activation_fn(actor_hidden_activation, framework="torch")
+        for i, n in enumerate(actor_hiddens):
+            self.policy_model.add_module(
+                "action_{}".format(i),
+                SlimFC(
+                    ins,
+                    n,
+                    initializer=torch.nn.init.xavier_uniform_,
+                    activation_fn=activation,
+                ),
+            )
+            # Add LayerNorm after each Dense.
+            if add_layer_norm:
+                self.policy_model.add_module(
+                    "LayerNorm_A_{}".format(i), nn.LayerNorm(n)
+                )
+            ins = n
+
+        self.policy_model.add_module(
+            "action_out",
+            SlimFC(
+                ins,
+                self.action_dim,
+                initializer=torch.nn.init.xavier_uniform_,
+                activation_fn=None,
+            ),
+        )
+
+        # Use sigmoid to scale to [0,1], but also double magnitude of input to
+        # emulate behaviour of tanh activation used in DDPG and TD3 papers.
+        # After sigmoid squashing, re-scale to env action space bounds.
+        class _Lambda(nn.Module):
+            def __init__(self_):
+                super().__init__()
+                low_action = nn.Parameter(
+                    torch.from_numpy(self.action_space.low).float())
+                low_action.requires_grad = False
+                self_.register_parameter("low_action", low_action)
+                action_range = nn.Parameter(
+                    torch.from_numpy(self.action_space.high -
+                                     self.action_space.low).float())
+                action_range.requires_grad = False
+                self_.register_parameter("action_range", action_range)
+
+            def forward(self_, x):
+                sigmoid_out = nn.Sigmoid()(2.0 * x)
+                squashed = self_.action_range * sigmoid_out + self_.low_action
+                return squashed
+
+        # Only squash if we have bounded actions.
+        if self.bounded:
+            self.policy_model.add_module("action_out_squashed", _Lambda())
+
+        # Build MADDPG Critic and Target Critic
+
+        obs_space_n = [
+            _make_continuous_space(space)
+            for _, (_, space, _, _) in model_config["multiagent"]["policies"].items()
+        ]
+        act_space_n = [
+            _make_continuous_space(space)
+            for _, (_, _, space, _) in model_config["multiagent"]["policies"].items()
+        ]
+        self.critic_obs = np.sum([obs_space.shape[0] for obs_space in obs_space_n])
+        self.critic_act = np.sum([act_space.shape[0] for act_space in act_space_n])
+
+        # Build the Q-net(s), including target Q-net(s).
+        def build_q_net(name_):
+            activation = get_activation_fn(critic_hidden_activation, framework="torch")
+            q_net = nn.Sequential()
+            ins = self.critic_obs + self.critic_act
+            for i, n in enumerate(critic_hiddens):
+                q_net.add_module(
+                    "{}_hidden_{}".format(name_, i),
+                    SlimFC(
+                        ins,
+                        n,
+                        initializer=nn.init.xavier_uniform_,
+                        activation_fn=activation,
+                    ),
+                )
+                ins = n
+
+            q_net.add_module(
+                "{}_out".format(name_),
+                SlimFC(
+                    ins,
+                    1,
+                    initializer=torch.nn.init.xavier_uniform_,
+                    activation_fn=None,
+                ),
+            )
+            return q_net
+
+        self.q_model = build_q_net("q")
+        if twin_q:
+            self.twin_q_model = build_q_net("twin_q")
+        else:
+            self.twin_q_model = None
+
+        self.view_requirements[SampleBatch.ACTIONS] = ViewRequirement(
+            SampleBatch.ACTIONS
+        )
+        self.view_requirements["new_actions"] = ViewRequirement("new_actions")
+        self.view_requirements["t"] = ViewRequirement("t")
+        self.view_requirements[SampleBatch.NEXT_OBS] = ViewRequirement(
+            data_col=SampleBatch.OBS, shift=1, space=self.obs_space
+        )
+
+    def get_q_values(
+        self, model_out_n: List[TensorType], act_n: List[TensorType]
+    ) -> TensorType:
+        """Return the Q estimates for the most recent forward pass.
+        This implements Q(s, a).
+        Args:
+            model_out_n (List[Tensor]): obs embeddings from the model layers of each agent,
+            of shape [BATCH_SIZE, num_outputs].
+            actions (Tensor): Actions from each agent to return the Q-values for.
+                Shape: [BATCH_SIZE, action_dim].
+        Returns:
+            tensor of shape [BATCH_SIZE].
+        """
+        model_out_n = torch.cat(model_out_n, -1)
+        act_n = torch.cat(act_n, dim=-1)
+        return self.q_model(torch.cat([model_out_n, act_n], -1))
+
+    def get_twin_q_values(
+        self, model_out_n: TensorType, act_n: TensorType
+    ) -> TensorType:
+        """Same as get_q_values but using the twin Q net.
+        This implements the twin Q(s, a).
+        Args:
+            model_out_n (List[Tensor]): obs embeddings from the model layers of each agent,
+            of shape [BATCH_SIZE, num_outputs].
+            actions (Tensor): Actions from each agent to return the Q-values for.
+                Shape: [BATCH_SIZE, action_dim].
+        Returns:
+            tensor of shape [BATCH_SIZE].
+        """
+        model_out_n = torch.cat(model_out_n, -1)
+        act_n = torch.cat(act_n, dim=-1)
+        return self.twin_q_model(torch.cat([model_out_n, act_n], -1))
+
+    def get_policy_output(self, model_out: TensorType) -> TensorType:
+        """Return the action output for the most recent forward pass.
+        This outputs the logits over the action space for discrete actions.
+        Args:
+            model_out (Tensor): obs embeddings from the model layers, of shape
+                [BATCH_SIZE, num_outputs].
+        Returns:
+            tensor of shape [BATCH_SIZE, action_out_size]
+        """
+        return self.policy_model(model_out)
+
+    def policy_variables(
+        self, as_dict: bool = False
+    ) -> Union[List[TensorType], Dict[str, TensorType]]:
+        """Return the list of variables for the policy net."""
+        if as_dict:
+            return self.policy_model.state_dict()
+        return list(self.policy_model.parameters())
+
+    def q_variables(
+        self, as_dict=False
+    ) -> Union[List[TensorType], Dict[str, TensorType]]:
+        """Return the list of variables for Q / twin Q nets."""
+        if as_dict:
+            return {
+                **self.q_model.state_dict(),
+                **(self.twin_q_model.state_dict() if self.twin_q_model else {}),
+            }
+        return list(self.q_model.parameters()) + (
+            list(self.twin_q_model.parameters()) if self.twin_q_model else []
+        )
