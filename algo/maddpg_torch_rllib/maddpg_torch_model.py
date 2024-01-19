@@ -6,6 +6,7 @@ from gymnasium.spaces import Box, Discrete
 
 from ray.rllib.algorithms.algorithm_config import AlgorithmConfig, NotProvided
 from ray.rllib.algorithms.dqn.dqn import DQN
+from ray.rllib.models.modelv2 import ModelV2
 from ray.rllib.models.torch.misc import SlimFC
 from ray.rllib.models.torch.torch_modelv2 import TorchModelV2
 from ray.rllib.models.utils import get_activation_fn
@@ -22,13 +23,10 @@ from ray.rllib.utils.deprecation import (
     ALGO_DEPRECATION_WARNING,
 )
 
-from .maddpg_torch_policy import MADDPGTorchPolicy
-
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 torch, nn = try_import_torch()
-
 
 def _make_continuous_space(space):
     if isinstance(space, Box):
@@ -154,13 +152,13 @@ class MADDPGConfig(AlgorithmConfig):
         # __sphinx_doc_end__
 
         # === Evaluation ===
-        self.evaluation_interval = None
-        self.evaluation_num_episodes = None
-        self.learn_other_policies = None
-        # Extra configuration that disables exploration.
-        self.evaluation_config = {
-            "explore": False
-        }
+        # self.evaluation_interval = None
+        # self.evaluation_num_episodes = None
+        # self.learn_other_policies = None
+        # # Extra configuration that disables exploration.
+        # self.evaluation_config = {
+        #     "explore": False
+        # }
         
 
 
@@ -384,6 +382,7 @@ class MADDPG(DQN):
     def get_default_policy_class(
         cls, config: AlgorithmConfig
     ) -> Optional[Type[Policy]]:
+        from .maddpg_torch_policy import MADDPGTorchPolicy
         return MADDPGTorchPolicy
 
 class MADDPGTorchModel(TorchModelV2, nn.Module):
@@ -485,11 +484,11 @@ class MADDPGTorchModel(TorchModelV2, nn.Module):
 
         obs_space_n = [
             _make_continuous_space(space)
-            for _, (_, space, _, _) in model_config["multiagent"]["policies"].items()
+            for _, (_, space, _, _) in model_config["policies"].items()
         ]
         act_space_n = [
             _make_continuous_space(space)
-            for _, (_, _, space, _) in model_config["multiagent"]["policies"].items()
+            for _, (_, _, space, _) in model_config["policies"].items()
         ]
         self.critic_obs = np.sum([obs_space.shape[0] for obs_space in obs_space_n])
         self.critic_act = np.sum([act_space.shape[0] for act_space in act_space_n])
@@ -528,14 +527,14 @@ class MADDPGTorchModel(TorchModelV2, nn.Module):
         else:
             self.twin_q_model = None
 
-        self.view_requirements[SampleBatch.ACTIONS] = ViewRequirement(
-            SampleBatch.ACTIONS
-        )
-        self.view_requirements["new_actions"] = ViewRequirement("new_actions")
-        self.view_requirements["t"] = ViewRequirement("t")
-        self.view_requirements[SampleBatch.NEXT_OBS] = ViewRequirement(
-            data_col=SampleBatch.OBS, shift=1, space=self.obs_space
-        )
+        # self.view_requirements[SampleBatch.ACTIONS] = ViewRequirement(
+        #     SampleBatch.ACTIONS
+        # )
+        # self.view_requirements["new_actions"] = ViewRequirement("new_actions")
+        # self.view_requirements["t"] = ViewRequirement("t")
+        # self.view_requirements[SampleBatch.NEXT_OBS] = ViewRequirement(
+        #     data_col=SampleBatch.OBS, shift=1, space=self.obs_space
+        # )
 
     def get_q_values(
         self, model_out_n: List[TensorType], act_n: List[TensorType]
@@ -602,3 +601,12 @@ class MADDPGTorchModel(TorchModelV2, nn.Module):
         return list(self.q_model.parameters()) + (
             list(self.twin_q_model.parameters()) if self.twin_q_model else []
         )
+
+class TorchNoopModel(TorchModelV2):
+    """Trivial model that just returns the obs flattened.
+
+    This is the model used if use_state_preprocessor=False."""
+
+    @override(ModelV2)
+    def forward(self, input_dict, state, seq_lens):
+        return input_dict["obs_flat"].float(), state

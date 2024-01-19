@@ -2,13 +2,13 @@ import ray
 import os
 from ray import tune, air
 from gym.spaces import Discrete, Box
-from ray.rllib.algorithms.maddpg.maddpg import MADDPGConfig,MADDPG
+from algo.maddpg_torch_rllib.maddpg_torch_model import MADDPGConfig,MADDPG
 from ray.rllib.env.env_context import EnvContext
 from ray.rllib.policy.policy import PolicySpec
 import optparse
 import numpy as np
 import time
-from util.ray_env import Simple_Scheduling
+from util.ray_maddpg_env import Simple_Scheduling
 
 # Define the policies
 env_config = EnvContext(env_config={"path":"/home/lwh/Documents/Code/RL-Scheduling/result/ray_maddpg"},worker_index=0)
@@ -18,22 +18,15 @@ observation = env.observation_space
 action = env.action_space
 policies = {}
 for agent_id, obs, act, i in zip(observation.keys(), observation.values(),action.values(),range(len(observation))):
-    policies[f'{agent_id}'] = (
-                                None,
-                                obs,
-                                act,
-                                {
-                                    "agent_id":i,
-                                    "use_local_critic": False,
-                                    "obs_space_dict":observation,
-                                    "act_space_dict":action,
-                                }
-                            )
+    policies[f'{agent_id}'] = (None,obs,act,{"agent_id":i,})
 
 env.stop_env()
 
-def policy_mapping_fn(agent_id):
-    return f'{agent_id}'
+def policy_mapping_fn(agent_id, episode, **kwargs):
+    if agent_id < env.truck_num:
+        return '0'
+    else:
+        return f'{agent_id}'
 
 if __name__ == "__main__":
     ray.init()
@@ -42,8 +35,11 @@ if __name__ == "__main__":
         "env": Simple_Scheduling,
         "env_config": {"path":"/home/lwh/Documents/Code/RL-Scheduling/result/ray_maddpg/"},
         "disable_env_checking":True,
-        "num_workers": 25,
+        "framework":"torch",
+        "num_workers": 30,
+        "num_envs_per_worker": 1,
         "num_cpus_per_worker": 1,
+        # "num_gpus_per_worker": 1/30,
         "ignore_worker_failures":True,
         "recreate_failed_workers":True,
         "multiagent":{
