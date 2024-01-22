@@ -3,7 +3,6 @@ from gymnasium.spaces import Box, Discrete
 import numpy as np
 
 from ray.rllib import Policy
-# from ray.rllib.algorithms.ddpg.noop_model import TorchNoopModel
 from ray.rllib.models import ModelV2
 from ray.rllib.models.catalog import ModelCatalog
 from ray.rllib.utils.error import UnsupportedSpaceException

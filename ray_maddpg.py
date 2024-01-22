@@ -1,7 +1,7 @@
 import ray
 import os
 from ray import tune, air
-from gym.spaces import Discrete, Box
+from gymnasium.spaces import Discrete, Box
 from algo.maddpg_torch_rllib.maddpg_torch_model import MADDPGConfig,MADDPG
 from ray.rllib.env.env_context import EnvContext
 from ray.rllib.policy.policy import PolicySpec
@@ -23,10 +23,7 @@ for agent_id, obs, act, i in zip(observation.keys(), observation.values(),action
 env.stop_env()
 
 def policy_mapping_fn(agent_id, episode, **kwargs):
-    if agent_id < env.truck_num:
-        return '0'
-    else:
-        return f'{agent_id}'
+    return f'{agent_id}'
 
 if __name__ == "__main__":
     ray.init()
@@ -36,10 +33,10 @@ if __name__ == "__main__":
         "env_config": {"path":"/home/lwh/Documents/Code/RL-Scheduling/result/ray_maddpg/"},
         "disable_env_checking":True,
         "framework":"torch",
-        "num_workers": 30,
+        "num_workers": 128,
         "num_envs_per_worker": 1,
         "num_cpus_per_worker": 1,
-        # "num_gpus_per_worker": 1/30,
+        # "num_gpus_per_worker": 1/32,
         "ignore_worker_failures":True,
         "recreate_failed_workers":True,
         "multiagent":{

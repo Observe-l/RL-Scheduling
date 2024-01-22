@@ -54,7 +54,7 @@ class ComputeTDErrorMixin:
             self.loss(self.model, None, input_dict)
 
             # Self.td_error is set within actor_critic_loss call.
-            return self.model.tower_state["td_error"]
+            return self.model.tower_stats["td_error"]
 
         self.compute_td_error = compute_td_error
 
@@ -185,7 +185,7 @@ class MADDPGTorchPolicy(TargetNetworkMixin, ComputeTDErrorMixin, TorchPolicyV2):
         huber_threshold = self.config["huber_threshold"]
         l2_reg = self.config["l2_reg"]
         agent_id = self.config["agent_id"]
-        n_agents = len(self.config["multiagent"]["policies"])
+        n_agents = len(self.config["policies"])
 
         input_dict = SampleBatch(
             obs=train_batch["_".join([SampleBatch.CUR_OBS, str(agent_id)])], _is_training=True
@@ -242,7 +242,9 @@ class MADDPGTorchPolicy(TargetNetworkMixin, ComputeTDErrorMixin, TorchPolicyV2):
         next_policy_n = [train_batch["new_actions_{}".format(id)] for id in range(n_agents)]
         next_policy_n[agent_id] = policy_tp1_smoothed
         rewards = train_batch["rewards_{}".format(agent_id)]
-        dones = train_batch["dones_{}".format(agent_id)]
+        print("The train_batch:")
+        print(train_batch)
+        terminateds = train_batch["terminateds_{}".format(agent_id)]
 
         if self.config["use_state_preprocessor"]:
             # Create all state preprocessors
@@ -299,7 +301,7 @@ class MADDPGTorchPolicy(TargetNetworkMixin, ComputeTDErrorMixin, TorchPolicyV2):
             q_tp1 = torch.min(q_tp1, twin_q_tp1)
 
         q_tp1_best = torch.squeeze(input=q_tp1, axis=len(q_tp1.shape) - 1)
-        q_tp1_best_masked = (~dones).float() * q_tp1_best
+        q_tp1_best_masked = (~terminateds).float() * q_tp1_best
 
         q_t_selected_target = (rewards + gamma ** n_step * q_tp1_best_masked).detach()
 
@@ -331,10 +333,10 @@ class MADDPGTorchPolicy(TargetNetworkMixin, ComputeTDErrorMixin, TorchPolicyV2):
                 if "bias" not in name:
                     critic_loss += l2_reg * l2_loss(var)
 
-        model.tower_state["q_t"] = q_t
-        model.tower_state["actor_loss"] = actor_loss
-        model.tower_state["critic_loss"] = critic_loss
-        model.tower_state["td_error"] = td_error
+        model.tower_stats["q_t"] = q_t
+        model.tower_stats["actor_loss"] = actor_loss
+        model.tower_stats["critic_loss"] = critic_loss
+        model.tower_stats["td_error"] = td_error
 
         return [actor_loss, critic_loss]
     

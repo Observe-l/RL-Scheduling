@@ -55,6 +55,9 @@ class Simple_Scheduling(MultiAgentEnv):
         Return a dictionary of observations, rewards, dones (indicating whether the episode is finished), and info.
         '''
         # Set action
+        act_n = [tmp_act for (_, tmp_act) in action_dict.items()]
+        act_dim = np.sum([tmp_dim.shape[0] for tmp_dim in act_n])
+        # print("The dim of action is:{}".format(act_dim))
         self._set_action(action_dict)
         # The SUMO simulation
         for _ in range(500):
@@ -91,6 +94,11 @@ class Simple_Scheduling(MultiAgentEnv):
 
         if current_time >= 3600*24*3:
             self.done['__all__'] = True
+        
+        obs_n = [tmp_obs for (_, tmp_obs) in obs.items()]
+        obs_dim = np.sum([tmp_obs.shape[0] for tmp_obs in obs_n])
+        # print("The dim of obs is:{}".format(obs_dim))
+        print("Total act, obs dim is:{}".format(act_dim+obs_dim))
 
         return obs, rewards, self.done, {}
 
@@ -248,7 +256,7 @@ class Simple_Scheduling(MultiAgentEnv):
         long_rew = self.shared_reward()
 
         rew = rew_1 + rew_2 + long_rew + penalty_1 + penalty_2
-        print("rew: {} ,rew_1: {} ,rew_2: {} ,penalty_1: {} ,penalty_2: {} ,long_rew: {}".format(rew,rew_1,rew_2,penalty_1,penalty_2,long_rew))
+        # print("rew: {} ,rew_1: {} ,rew_2: {} ,penalty_1: {} ,penalty_2: {} ,long_rew: {}".format(rew,rew_1,rew_2,penalty_1,penalty_2,long_rew))
         return rew
     
     def shared_reward(self) -> float:
