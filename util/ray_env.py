@@ -247,7 +247,7 @@ class Simple_Scheduling(MultiAgentEnv):
         long_rew = self.shared_reward()
 
         rew = rew_1 + rew_2 + long_rew + penalty_1 + penalty_2
-        print("rew: {} ,rew_1: {} ,rew_2: {} ,penalty_1: {} ,penalty_2: {} ,long_rew: {}".format(rew,rew_1,rew_2,penalty_1,penalty_2,long_rew))
+        # print("rew: {} ,rew_1: {} ,rew_2: {} ,penalty_1: {} ,penalty_2: {} ,long_rew: {}".format(rew,rew_1,rew_2,penalty_1,penalty_2,long_rew))
         return rew
     
     def shared_reward(self) -> float:

@@ -44,15 +44,12 @@ if __name__ == "__main__":
             "policy_mapping_fn":policy_mapping_fn,
         }
     })
-    ray_dir = "/home/lwh/Documents/Code/RL-Scheduling/train_ray/"
     exp_name = "MADDPG"
-    stop = {'episodes_total':200}
+    stop = {'episodes_total':300}
     tunner = tune.Tuner(
         MADDPG,
         param_space=config,
         run_config=air.RunConfig(
-            storage_path=ray_dir,
-            local_dir=ray_dir,
             log_to_file=True,
             name=exp_name,
             stop=stop,

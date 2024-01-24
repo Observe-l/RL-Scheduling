@@ -16,20 +16,12 @@ observation = env.observation_space
 action = env.action_space
 policies = {}
 for agent_id, obs, act, i in zip(observation.keys(), observation.values(),action.values(),range(len(observation))):
-    policies[f'{agent_id}'] = (
-                                None,
-                                obs,
-                                act,
-                                {},
-                            )
+    policies[f'{agent_id}'] = (None,obs,act,{})
 
 env.stop_env()
 
 def policy_mapping_fn(agent_id, episode, **kwargs):
-    if agent_id < env.truck_num:
-        return '0'
-    else:
-        return f'{agent_id}'
+    return f'{agent_id}'
 
 if __name__ == "__main__":
     ray.init()
@@ -38,10 +30,10 @@ if __name__ == "__main__":
         "env": Simple_Scheduling,
         "env_config": {"path":"/home/lwh/Documents/Code/RL-Scheduling/result/ray_ppo/"},
         "disable_env_checking":True,
-        "num_workers": 30,
+        "num_workers": 128,
         "num_envs_per_worker": 1,
         "num_cpus_per_worker": 1,
-        "num_gpus_per_worker": 1/30,
+        # "num_gpus_per_worker": 1/30,
         "ignore_worker_failures":True,
         "recreate_failed_workers":True,
         "multiagent":{
@@ -49,16 +41,13 @@ if __name__ == "__main__":
             "policy_mapping_fn":policy_mapping_fn,
         }
     })
-    ray_dir = "/home/lwh/Documents/Code/RL-Scheduling/train_ray/"
     exp_name = "MAPPO"
-    stop = {"training_iteration": 30}
+    stop = {'episodes_total':300}
     tunner = tune.Tuner(
         PPO,
         param_space=config,
         run_config=air.RunConfig(
-            storage_path=ray_dir,
             log_to_file=True,
-            local_dir=ray_dir,
             name=exp_name,
             stop=stop,
             checkpoint_config=air.CheckpointConfig(
