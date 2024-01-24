@@ -242,8 +242,6 @@ class MADDPGTorchPolicy(TargetNetworkMixin, ComputeTDErrorMixin, TorchPolicyV2):
         next_policy_n = [train_batch["new_actions_{}".format(id)] for id in range(n_agents)]
         next_policy_n[agent_id] = policy_tp1_smoothed
         rewards = train_batch["rewards_{}".format(agent_id)]
-        print("The train_batch:")
-        print(train_batch)
         terminateds = train_batch["terminateds_{}".format(agent_id)]
 
         if self.config["use_state_preprocessor"]:

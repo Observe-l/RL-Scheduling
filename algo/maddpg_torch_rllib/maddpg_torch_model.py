@@ -111,7 +111,7 @@ class MADDPGConfig(AlgorithmConfig):
 
         # Changes to Algorithm's default:
         self.rollout_fragment_length = 100
-        self.train_batch_size = 128
+        self.train_batch_size = 1024
         self.num_rollout_workers = 1
         self.min_time_s_per_iteration = 0
         self.min_sample_timesteps_per_iteration = 1000
@@ -334,42 +334,23 @@ class MADDPGConfig(AlgorithmConfig):
 def before_learn_on_batch(multi_agent_batch, policies, train_batch_size):
     samples = {}
 
+    def sampler(policy, obs):
+        return policy.compute_actions(obs)[0]
+    
     # Modify keys.
     for pid, p in policies.items():
         i = p.config["agent_id"]
         keys = multi_agent_batch.policy_batches[pid].keys()
         keys = ["_".join([k, str(i)]) for k in keys]
         samples.update(dict(zip(keys, multi_agent_batch.policy_batches[pid].values())))
-
-    # Make ops and feed_dict to get "new_obs" from target action sampler.
-    new_obs_n = list()
-    new_act_n = list()
-    for k, v in samples.items():
-        if "new_obs" in k:
-            new_obs_n.append(v)
-
-    def sampler(policy, obs):
-        return policy.compute_actions(obs)[0]
-    
-    new_act_n = [
-        sampler(policy, obs) for policy, obs in zip(policies.values(), new_obs_n)
-    ]
-
-    samples.update(
-        {"new_actions_%d" % i: new_act for i, new_act in enumerate(new_act_n)}
-    )
+        new_obs = samples["new_obs_{}".format(i)]
+        new_act = sampler(p, new_obs)
+        samples.update({"new_actions_{}".format(i): new_act})
 
     # Share samples among agents.
     policy_batches = {pid: SampleBatch(samples) for pid in policies.keys()}
     return MultiAgentBatch(policy_batches, train_batch_size)
 
-
-@Deprecated(
-    old="rllib/algorithms/maddpg/",
-    new="rllib_contrib/maddpg/",
-    help=ALGO_DEPRECATION_WARNING,
-    error=False,
-)
 
 class MADDPG(DQN):
     @classmethod
@@ -567,6 +548,7 @@ class MADDPGTorchModel(TorchModelV2, nn.Module):
             tensor of shape [BATCH_SIZE].
         """
         model_out_n = torch.cat(model_out_n, -1)
+        print
         act_n = torch.cat(act_n, dim=-1)
         return self.twin_q_model(torch.cat([model_out_n, act_n], -1))
 

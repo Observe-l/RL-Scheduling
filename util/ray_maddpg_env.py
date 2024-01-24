@@ -98,7 +98,8 @@ class Simple_Scheduling(MultiAgentEnv):
         obs_n = [tmp_obs for (_, tmp_obs) in obs.items()]
         obs_dim = np.sum([tmp_obs.shape[0] for tmp_obs in obs_n])
         # print("The dim of obs is:{}".format(obs_dim))
-        print("Total act, obs dim is:{}".format(act_dim+obs_dim))
+        if act_dim + obs_dim != 189:
+            print("Total act, obs dim is:{}\nact_dim is:{}\nobs_dim is:{}".format(act_dim+obs_dim,act_dim,obs_dim))
 
         return obs, rewards, self.done, {}
 
