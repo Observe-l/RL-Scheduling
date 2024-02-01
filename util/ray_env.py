@@ -89,7 +89,7 @@ class Simple_Scheduling(MultiAgentEnv):
                 tmp_time = round(current_time / 3600,3)
                 f_csv.writerow([tmp_time, reward, agent.cumulate_reward])
 
-        if current_time >= 3600*24*3:
+        if current_time >= 3600*24:
             self.done['__all__'] = True
 
         return obs, rewards, self.done, {}

@@ -11,7 +11,7 @@ import time
 from util.ray_maddpg_env import Simple_Scheduling
 
 # Define the policies
-env_config = EnvContext(env_config={"path":"/home/lwh/Documents/Code/RL-Scheduling/result/ray_maddpg"},worker_index=0)
+env_config = EnvContext(env_config={"path":"/home/lwh/Documents/Code/RL-Scheduling/result/ray_maddpg_32workers"},worker_index=0)
 env = Simple_Scheduling(env_config=env_config)
 
 observation = env.observation_space
@@ -30,10 +30,10 @@ if __name__ == "__main__":
     config = MADDPGConfig().to_dict()
     config.update({
         "env": Simple_Scheduling,
-        "env_config": {"path":"/home/lwh/Documents/Code/RL-Scheduling/result/ray_maddpg/"},
+        "env_config": {"path":"/home/lwh/Documents/Code/RL-Scheduling/result/ray_maddpg_32workers/"},
         "disable_env_checking":True,
         "framework":"torch",
-        "num_workers": 128,
+        "num_workers": 32,
         "num_envs_per_worker": 1,
         "num_cpus_per_worker": 1,
         # "num_gpus_per_worker": 1/32,
@@ -44,8 +44,8 @@ if __name__ == "__main__":
             "policy_mapping_fn":policy_mapping_fn,
         }
     })
-    exp_name = "MADDPG"
-    stop = {'episodes_total':300}
+    exp_name = "MADDPG_32workers"
+    stop = {'episodes_total':1800}
     tunner = tune.Tuner(
         MADDPG,
         param_space=config,

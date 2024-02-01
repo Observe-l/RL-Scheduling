@@ -9,7 +9,7 @@ import time
 from util.ray_env import Simple_Scheduling
 
 # Define the policies
-env_config = EnvContext(env_config={"path":"/home/lwh/Documents/Code/RL-Scheduling/result/ray_mappo"},worker_index=0)
+env_config = EnvContext(env_config={"path":"/home/lwh/Documents/Code/RL-Scheduling/result/ray_mappo_32workers"},worker_index=0)
 env = Simple_Scheduling(env_config=env_config)
 
 observation = env.observation_space
@@ -28,9 +28,9 @@ if __name__ == "__main__":
     config = PPOConfig().to_dict()
     config.update({
         "env": Simple_Scheduling,
-        "env_config": {"path":"/home/lwh/Documents/Code/RL-Scheduling/result/ray_ppo/"},
+        "env_config": {"path":"/home/lwh/Documents/Code/RL-Scheduling/result/ray_mappo_32workers/"},
         "disable_env_checking":True,
-        "num_workers": 128,
+        "num_workers": 32,
         "num_envs_per_worker": 1,
         "num_cpus_per_worker": 1,
         # "num_gpus_per_worker": 1/30,
@@ -41,8 +41,8 @@ if __name__ == "__main__":
             "policy_mapping_fn":policy_mapping_fn,
         }
     })
-    exp_name = "MAPPO"
-    stop = {'episodes_total':300}
+    exp_name = "MAPPO_32workers"
+    stop = {'episodes_total':1800}
     tunner = tune.Tuner(
         PPO,
         param_space=config,
