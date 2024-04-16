@@ -45,7 +45,6 @@ class Simple_Scheduling(MultiAgentEnv):
         self.operable_penalty = {}
         # done flag
         self.done['__all__'] = False
-
         return obs
 
     def step(self, action_dict):
