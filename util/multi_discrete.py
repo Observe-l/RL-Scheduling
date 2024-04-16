@@ -3,10 +3,10 @@
 
 import numpy as np
 
-import gym
-from gym.spaces import prng
+import gymnasium
+from gymnasium.spaces import prng
 
-class MultiDiscrete(gym.Space):
+class MultiDiscrete(gymnasium.Space):
     """
     - The multi-discrete action space consists of a series of discrete action spaces with different parameters
     - It can be adapted to both a Discrete action space or a continuous (Box) action space

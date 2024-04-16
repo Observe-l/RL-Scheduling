@@ -22,10 +22,7 @@ class Simple_Scheduling(MultiAgentEnv):
         for agent_id, tmp_obs in obs.items():
             obs_dim = len(tmp_obs)
             self.observation_space[agent_id] = Box(low=0, high=+np.inf, shape=(obs_dim,),dtype=np.float32)
-            if agent_id < self.truck_num:
-                self.action_space[agent_id] = Discrete(3)
-            else:
-                self.action_space[agent_id] = Discrete(2)
+            self.action_space[agent_id] = Discrete(3)
         # The done flag
         self.done = {}
 
@@ -44,6 +41,8 @@ class Simple_Scheduling(MultiAgentEnv):
         self.init_sumo()
         # Get init observation
         obs = self._get_obs()
+        # Operable penalty
+        self.operable_penalty = {}
         # done flag
         self.done['__all__'] = False
 
@@ -54,6 +53,8 @@ class Simple_Scheduling(MultiAgentEnv):
         Compute the environment dynamics given the actions of each agent.
         Return a dictionary of observations, rewards, dones (indicating whether the episode is finished), and info.
         '''
+        # Reset the penalty before excute action
+        self.operable_penalty = {}
         # Set action
         self._set_action(action_dict)
         # The SUMO simulation
@@ -61,7 +62,7 @@ class Simple_Scheduling(MultiAgentEnv):
             traci.simulationStep()
             # Refresh truck state
             tmp_state = [tmp_truck.refresh_state() for tmp_truck in self.truck_agents]
-            self.manager.produce_load()
+            self.manager.base_produce_load()
         
         # Resume all trucks to get observation
         self.resume_truck()
@@ -82,7 +83,7 @@ class Simple_Scheduling(MultiAgentEnv):
             tmp_P23 = round(self.factory[2].product.loc['P23','total'],3)
             tmp_time = round(current_time / 3600,3)
             f_csv.writerow([tmp_time,tmp_A,tmp_B,tmp_P12,tmp_P23])
-        for agent, reward, tmp_file in zip(self.truck_agents + self.factory_agents, rewards.values(), self.reward_file):
+        for agent, reward, tmp_file in zip(self.truck_agents, rewards.values(), self.reward_file):
             agent.cumulate_reward += reward
             with open(tmp_file,'a') as f:
                 f_csv = writer(f)
@@ -101,56 +102,41 @@ class Simple_Scheduling(MultiAgentEnv):
         observation = {}
         # The agent id. must be integer, start from 0
         agent_id = 0
-        # The truck agents' observation
-        for truck_agent in self.truck_agents:
-            distance = []
-            com_truck_num = []
-            com_factory_action = []
-
-            for factory_agent in self.factory_agents:
-                # Observation 1: distance to 3 factories, [0,+inf]
-                tmp_distance = truck_agent.get_distance(factory_agent.id)
-                if tmp_distance < 0:
-                    tmp_distance = 0
-                distance.append(tmp_distance)
-
-                # Observation 3: the action of factory agent
-                tmp_factory_action = 1 if factory_agent.req_truck is True else 0
-                com_factory_action.append(tmp_factory_action)
-
-            # Observation 2: number of trucks that driving to each factory
-            for factory in self.factory:
-                tmp_truck_num = 0
-                for tmp_truck in self.truck_agents:
-                    if tmp_truck.destination == factory.id:
-                        tmp_truck_num += 1
-                com_truck_num.append(tmp_truck_num)
-
-            # Observation 4: The state of the truck
-            state = truck_agent.get_truck_state()
-            # Store the observation in the dictionary
-            observation[agent_id] = np.concatenate([distance] + [com_truck_num] + [com_factory_action] + [[state]])
-
-            agent_id += 1
-        
-        # The factory agents' observation
-        for factory_agent in self.factory_agents:
+        # Shared observation, Storage/Queue from factory
+        product_storage = []
+        material_storage = []
+        com_truck_num = []
+        for factory_agent in self.factory:
             # Get the storage of product
-            product_storage = []
             for factory_product in factory_agent.product.index:
                 product_storage.append(factory_agent.container.loc[factory_product,'storage'])
             # Get the storage of the material
-            material_storage = []
             material_index = factory_agent.get_material()
             for tmp_material in material_index:
                 material_storage.append(factory_agent.container.loc[tmp_material,'storage'])
             # Get the number of trucks at current factories
-            truck_num = 0
+            tmp_truck_num = 0
             for tmp_truck in self.truck_agents:
                 if tmp_truck.destination == factory_agent.id:
-                    truck_num += 1
-            observation[agent_id] = np.concatenate([product_storage] + [material_storage] + [[truck_num]])
+                    tmp_truck_num += 1
+            com_truck_num.append(tmp_truck_num)
+        queue_obs = np.concatenate([product_storage] +[material_storage] + [com_truck_num])
 
+        # The truck agents' observation
+        for truck_agent in self.truck_agents:
+            distance = []
+            # Distance to 3 factories, [0,+inf]
+            for factory_agent in self.factory[0:-1]:
+                tmp_distance = truck_agent.get_distance(factory_agent.id)
+                if tmp_distance < 0:
+                    tmp_distance = 0
+                distance.append(tmp_distance)
+            # Current destination
+            destination = int(truck_agent.destination[-1])
+            # The state of the truck
+            state = truck_agent.get_truck_state()
+            # Store the observation in the dictionary
+            observation[agent_id] = np.concatenate([queue_obs] + [distance] + [com_truck_num] + [[destination]] + [[state]])
             agent_id += 1
         
         return observation
@@ -160,15 +146,14 @@ class Simple_Scheduling(MultiAgentEnv):
         Set action for all the agent
         '''
         for agent_id, action in actions.items():
-            if agent_id < self.truck_num:
-                agent = self.truck_agents[agent_id]
-                target_id = self.factory_agents[action].id
-                if agent.operable_flag:
-                    agent.delivery(destination=target_id)
-                else:
-                    pass
-            else:
-                self.factory_agents[agent_id-self.truck_num].req_truck = True if action==1 else False
+            agent = self.truck_agents[agent_id]
+            target_id = self.factory[action].id
+            # Assign truck to the new destination
+            if agent.operable_flag:
+                agent.delivery(destination=target_id)
+            # If the truck is not operable and the agent assign it to another place, give the penalty
+            elif agent.destination != target_id:
+                self.operable_penalty[agent_id] = -500
     
     def _get_reward(self) -> dict:
         '''
@@ -180,9 +165,8 @@ class Simple_Scheduling(MultiAgentEnv):
         for tmp_agent in self.truck_agents:
             rew[agent_id] = self.truck_reward(tmp_agent)
             agent_id += 1
-        for tmp_agent in self.factory_agents:
-            rew[agent_id] = self.factory_reward(tmp_agent)
-            agent_id += 1
+        # Update the reward. Replace it with the action penalty
+        rew.update({k: self.operable_penalty.get(k, v) for k,v in rew.items()})
         return rew
 
     def truck_reward(self, agent) -> float:
@@ -195,8 +179,6 @@ class Simple_Scheduling(MultiAgentEnv):
         rew_1 = 0
         penalty = 0
         for factory in self.factory:
-            rew_1 += factory.step_emergency_product[agent.destination]
-
             # Penalty: going to wrong factory
             if agent.destination == factory.id and factory.req_truck is False:
                 penalty = -100
@@ -217,39 +199,6 @@ class Simple_Scheduling(MultiAgentEnv):
         # print("rew: {} ,rew_1: {} ,rew_2: {} ,penalty: {} ,long_rew: {}".format(rew,rew_1,rew_2,penalty,long_rew))
         return rew
     
-    def factory_reward(self, agent) -> float:
-        '''
-        Read the reward from factory agent.
-        '''
-        # Short-term reward 1: change of production num 0~20
-        rew_1 = 1 * agent.step_transport
-
-        # Short-term reward 2: change of transported product in next factory, 0~100
-        # Penalty: when the factory run out of material, 0~50
-        rew_2 = 0
-        penalty_1 = 0
-        for factory in self.factory:
-            rew_2 += factory.step_emergency_product[agent.id]
-            penalty_1 += 2 * factory.penalty[agent.id]
-        
-        # penalty: if more than half trucks in same factory, and factory still ask for new truck
-        penalty_2 = 0
-        tmp_truck_num = 0
-        for truck_agent in self.truck_agents:
-            if truck_agent.destination == agent.id:
-                tmp_truck_num += 1
-        
-        if tmp_truck_num >= 0.5 * len(self.truck_agents) and agent.req_truck:
-            penalty_2 = -200
-
-
-        # Get shared Long-term reward
-        long_rew = self.shared_reward()
-
-        rew = rew_1 + rew_2 + long_rew + penalty_1 + penalty_2
-        # print("rew: {} ,rew_1: {} ,rew_2: {} ,penalty_1: {} ,penalty_2: {} ,long_rew: {}".format(rew,rew_1,rew_2,penalty_1,penalty_2,long_rew))
-        return rew
-    
     def shared_reward(self) -> float:
         '''
         Long-term shared reward
@@ -262,7 +211,7 @@ class Simple_Scheduling(MultiAgentEnv):
         # P1=1, P2=10
         for factory in self.factory:
             rew_trans +=  1 * factory.step_transport
-            rew_product += 4 * factory.step_final_product
+            rew_product += 40 * factory.step_final_product
         shared_rew = rew_trans + rew_product
         return shared_rew
 
@@ -278,7 +227,6 @@ class Simple_Scheduling(MultiAgentEnv):
                 Factory(factory_id='Factory1', produce_rate=[['P2',10,None,None],['P12',2.5,'P1,P2','1,1']]),
                 Factory(factory_id='Factory2', produce_rate=[['P3',5,None,None],['P23',2.5,'P2,P3','1,1'],['A',2.5,'P12,P3','1,1']]),
                 Factory(factory_id='Factory3', produce_rate=[['P4',5,None,None],['B',2.5,'P23,P4','1,1']])]
-        self.factory_agents = self.factory[0:self.factory_num]
         self.manager = product_management(self.factory, self.truck_agents)
         for _ in range(100):
             traci.simulationStep()
@@ -296,7 +244,7 @@ class Simple_Scheduling(MultiAgentEnv):
         self.result_file = folder_path + 'result.csv'
         self.reward_file = []
         # Create reward file
-        for agent in self.truck_agents + self.factory_agents:
+        for agent in self.truck_agents:
             tmp_path = folder_path + agent.id + '.csv'
             with open(tmp_path,'w') as f:
                 f_csv = writer(f)
@@ -339,8 +287,7 @@ class Simple_Scheduling(MultiAgentEnv):
             factory_agent.step_final_product = 0
             # The number of decreased component during last time step
             factory_agent.step_transport = 0
-            factory_agent.step_emergency_product = {'Factory0':0, 'Factory1':0, 'Factory2':0, 'Factory3':0}
-            # The penalty, when run out of material
-            factory_agent.penalty = {'Factory0':0, 'Factory1':0, 'Factory2':0, 'Factory3':0}
+            # factory_agent.step_emergency_product = {'Factory0':0, 'Factory1':0, 'Factory2':0, 'Factory3':0}
+
     def stop_env(self):
         traci.close()

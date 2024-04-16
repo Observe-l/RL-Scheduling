@@ -296,9 +296,9 @@ class Factory(object):
         self.step_final_product = 0
         # The number of decreased component during last time step
         self.step_transport = 0
-        self.step_emergency_product = {'Factory0':0, 'Factory1':0, 'Factory2':0, 'Factory3':0}
+        # self.step_emergency_product = {'Factory0':0, 'Factory1':0, 'Factory2':0, 'Factory3':0}
         # The penalty, when run out of material
-        self.penalty = {'Factory0':0, 'Factory1':0, 'Factory2':0, 'Factory3':0}
+        # self.penalty = {'Factory0':0, 'Factory1':0, 'Factory2':0, 'Factory3':0}
 
         # There two dimension of action: 1) Need trucks or not; 2) The number of new trucks
         self.req_truck = False
@@ -341,11 +341,11 @@ class Factory(object):
 
                 tmp_storage = self.container.loc[tmp_materials,'storage'].to_numpy()
 
-                # Calculate Penalty. If the raw material, give a penalty
-                for remain_material, single_ratio in zip(tmp_materials,tmp_ratio):
-                    if self.container.loc[remain_material,'storage'] <= single_ratio*tmp_rate:
-                        tmp_source_factory = self.container.loc[remain_material,'source']
-                        self.penalty[tmp_source_factory] -= 0.05
+                # # Calculate Penalty. If the raw material, give a penalty
+                # for remain_material, single_ratio in zip(tmp_materials,tmp_ratio):
+                #     if self.container.loc[remain_material,'storage'] <= single_ratio*tmp_rate:
+                #         tmp_source_factory = self.container.loc[remain_material,'source']
+                #         self.penalty[tmp_source_factory] -= 0.05
 
                 # Check storage
                 if (tmp_storage > tmp_ratio*tmp_rate).all() and self.container.loc[index,'capacity'] > self.container.loc[index,'storage']:
@@ -393,15 +393,15 @@ class Factory(object):
                 # print when startting unloading
                 # print(f'[unloading] {truck.id} start unloading {truck.product} at:{self.id}')
             # Maximum loading speed: 0.5 t/s
-            if self.container.loc[truck.product,'storage'] <= 2000:
-                emergency_par = 3
-            else:
-                emergency_par = 1
+            # if self.container.loc[truck.product,'storage'] <= 2000:
+            #     emergency_par = 3
+            # else:
+            #     emergency_par = 1
             unload_weight = min(0.5, self.container.loc[truck.product,'capacity'] - self.container.loc[truck.product,'storage'])
             truck_state, exceed_cargo = truck.unload_cargo(unload_weight)
             self.container.at[truck.product,'storage'] = self.container.loc[truck.product,'storage'] + (unload_weight - exceed_cargo)
-            product_source = self.container.loc[truck.product,'source']
-            self.step_emergency_product[product_source] += emergency_par * (unload_weight - exceed_cargo)
+            # product_source = self.container.loc[truck.product,'source']
+            # self.step_emergency_product[product_source] += emergency_par * (unload_weight - exceed_cargo)
         
     def get_material(self) -> list:
         tmp_material = list(filter(lambda item: item is not None,self.product['material'].values.tolist()))
@@ -443,8 +443,10 @@ class product_management(object):
             tmp_factory.produce_product()
             for tmp_truck in self.truck:
                 tmp_factory.unload_cargo(tmp_truck)
-            # Start loading the product to truck.
-            # Only when the product is enough to full the truck
+            '''
+            Start loading the product to truck.
+            Only when the product is enough to full the truck
+            '''
             tmp_product = self.product_idx[tmp_factory.id]
             truck_pool = [truck for truck in self.truck if truck.position == tmp_factory.id and truck.state == 'waitting']
 
@@ -473,6 +475,50 @@ class product_management(object):
                 item = tmp_product[0]
                 if (tmp_factory.container.loc[item,'storage'] > self.truck[0].capacity) and (item not in truck_duplicate) and (len(truck_pool)>0):
                     tmp_result = tmp_factory.load_cargo(truck_pool[0],item)
+
+    def base_produce_load(self) -> None:
+        for tmp_factory in self.factory:
+            # Produce the product
+            tmp_factory.produce_product()
+            # Unload goods for all truck
+            for tmp_truck in self.truck:
+                tmp_factory.unload_cargo(tmp_truck)
+            '''
+            Start loading the product to truck.
+            Only when the product is enough to full the truck
+            '''
+            # Get the index of the transported product
+            tmp_product = self.product_idx[tmp_factory.id]
+            
+            # Get the list of trucks that start loading goods
+            truck_continue = [truck for truck in self.truck if truck.position == tmp_factory.id and truck.state == 'loading']
+            for tmp_truck in truck_continue:
+                if tmp_truck.position == tmp_factory.id:
+                    tmp_result = tmp_factory.load_cargo(tmp_truck,tmp_truck.product)
+                    if tmp_result == 'full':
+                        # print(f'[delievery] {tmp_truck.id} delivers the {tmp_truck.product}')
+                        tmp_truck.delivery(self.transport_idx[tmp_truck.product])
+                        # Remove the left truck from pool
+                        truck_continue.remove(tmp_truck)
+            
+            # Get the list of trucks that wait to load goods
+            truck_pool = [truck for truck in self.truck if truck.position == tmp_factory.id and truck.state == 'waitting']
+            # Check the current storage, decide whether loading the goods
+            # Random select the goods to transport
+            random.shuffle(tmp_product)
+            for loading_product in tmp_product:
+                # Refresh the trucks' number
+                num_truck = len([truck for truck in truck_continue if truck.product == loading_product])
+                # Iterate the truck pool
+                for tmp_truck in truck_pool:
+                    # Check the storage of the loading_product
+                    # If it's enouth for current activate truck, assgin new trucks
+                    if (num_truck+1) * tmp_truck.capacity <= tmp_factory.container.loc[loading_product,'storage']:
+                        tmp_result = tmp_factory.load_cargo(tmp_truck,loading_product)
+                        # Refresh the activate trucks' number
+                        num_truck += 1
+                    else:
+                        break
 
 class World(object):
     def __init__(self):
@@ -538,6 +584,6 @@ class World(object):
             factory_agent.step_final_product = 0
             # The number of decreased component during last time step
             factory_agent.step_transport = 0
-            factory_agent.step_emergency_product = {'Factory0':0, 'Factory1':0, 'Factory2':0, 'Factory3':0}
+            # factory_agent.step_emergency_product = {'Factory0':0, 'Factory1':0, 'Factory2':0, 'Factory3':0}
             # The penalty, when run out of material
-            factory_agent.penalty = {'Factory0':0, 'Factory1':0, 'Factory2':0, 'Factory3':0}
+            # factory_agent.penalty = {'Factory0':0, 'Factory1':0, 'Factory2':0, 'Factory3':0}
