@@ -174,27 +174,28 @@ class Simple_Scheduling(MultiAgentEnv):
         The reward depends on the waitting time and the number of product transported during last time step
         '''
 
-        # Short-term reward 1: change of transported product in next factory 0~100
-        rew_1 = 0
-        penalty = 0
+        # Reward 1: final product * 40
+        rew_final_product = 0
         for factory in self.factory:
-            # Penalty: going to wrong factory
-            if agent.destination == factory.id and factory.req_truck is False:
-                penalty = -100
-
+            rew_final_product += 40 * factory.step_final_product
+        # Reward 2: Transported component durning last time step
+        rew_last_components = agent.last_transport
         
-        # Short-term reward 2: depends on the distance of between trucks and the destination 0~8
+        # Reward 3: depends on the distance of between trucks and the destination 0~8
         distance = agent.get_distance(agent.destination)
         if distance < 0:
             distance = 1
         # Normalize the distance (min-max scale), assume maximum distance is 5000
         norm_distance = distance / 5000
-        rew_2 = -3 * np.log(norm_distance)
+        distance_reward = -3 * np.log(norm_distance)
 
-        # Get shared Long-term reward
-        long_rew = self.shared_reward()
+        '''
+        # Penalty, when the truck is idle
+        if agent.state == "waitting":
+            penalty = -20
+        '''
         
-        rew = rew_1 + rew_2 + penalty  + long_rew
+        rew = rew_final_product + rew_last_components + distance_reward
         # print("rew: {} ,rew_1: {} ,rew_2: {} ,penalty: {} ,long_rew: {}".format(rew,rew_1,rew_2,penalty,long_rew))
         return rew
     
@@ -287,6 +288,9 @@ class Simple_Scheduling(MultiAgentEnv):
             # The number of decreased component during last time step
             factory_agent.step_transport = 0
             # factory_agent.step_emergency_product = {'Factory0':0, 'Factory1':0, 'Factory2':0, 'Factory3':0}
+        for truck in self.truck_agents:
+            # Reset the number of transported goods
+            truck.last_transport = 0
 
     def stop_env(self):
         traci.close()

@@ -42,7 +42,7 @@ if __name__ == "__main__":
         }
     })
     exp_name = "MAPPO_base"
-    stop = {'episodes_total':1800}
+    stop = {'episodes_total':2000}
     tunner = tune.Tuner(
         PPO,
         param_space=config,

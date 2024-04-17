@@ -217,7 +217,6 @@ class Truck(object):
             self.color = (255,0,0,255)
             traci.vehicle.setColor(typeID=self.id,color=self.color)
             # After the truck is full, record it
-            self.last_transport = self.total_product
             self.total_product += self.weight
             return ('full', self.weight + weight - self.capacity)
     
@@ -231,6 +230,7 @@ class Truck(object):
             self.color = (0,0,255,255)
             traci.vehicle.setColor(typeID=self.id,color=self.color)
             self.weight -= weight
+            self.last_transport += weight
             return ('successful', 0.0)
         else:
             remainning_weight = self.weight
@@ -239,6 +239,7 @@ class Truck(object):
             # RGBA Green
             self.color = (255,255,0,255)
             traci.vehicle.setColor(typeID=self.id,color=self.color)
+            self.last_transport += remainning_weight
             return ('not enough', remainning_weight)
     
     def get_distance(self, positon) -> float:
@@ -300,9 +301,6 @@ class Factory(object):
         # The penalty, when run out of material
         # self.penalty = {'Factory0':0, 'Factory1':0, 'Factory2':0, 'Factory3':0}
 
-        # There two dimension of action: 1) Need trucks or not; 2) The number of new trucks
-        self.req_truck = False
-        self.req_num = 0
         # The number of trucks which desitination is current factory or stop at current factory
         self.truck_num = 0
 
@@ -389,14 +387,6 @@ class Factory(object):
         Unload cargo to container
         '''
         if self.id in truck.position and (truck.state == 'pending for unloading' or truck.state == 'unloading') and self.container.loc[truck.product,'storage'] < self.container.loc[truck.product,'capacity']:
-            # if truck.state == 'pending for unloading':
-                # print when startting unloading
-                # print(f'[unloading] {truck.id} start unloading {truck.product} at:{self.id}')
-            # Maximum loading speed: 0.5 t/s
-            # if self.container.loc[truck.product,'storage'] <= 2000:
-            #     emergency_par = 3
-            # else:
-            #     emergency_par = 1
             unload_weight = min(0.5, self.container.loc[truck.product,'capacity'] - self.container.loc[truck.product,'storage'])
             truck_state, exceed_cargo = truck.unload_cargo(unload_weight)
             self.container.at[truck.product,'storage'] = self.container.loc[truck.product,'storage'] + (unload_weight - exceed_cargo)
