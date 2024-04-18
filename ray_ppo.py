@@ -9,7 +9,7 @@ import time
 from util.ray_env import Simple_Scheduling
 
 # Define the policies
-env_config = EnvContext(env_config={"path":"/home/lwh/Documents/Code/RL-Scheduling/result/ppo_async"},worker_index=0)
+env_config = EnvContext(env_config={"path":"/home/lwh/Documents/Code/RL-Scheduling/result/ppo_async_v2"},worker_index=0)
 env = Simple_Scheduling(env_config=env_config)
 
 observation = env.observation_space
@@ -28,7 +28,7 @@ if __name__ == "__main__":
     config = PPOConfig().to_dict()
     config.update({
         "env": Simple_Scheduling,
-        "env_config": {"path":"/home/lwh/Documents/Code/RL-Scheduling/result/ppo_async/"},
+        "env_config": {"path":"/home/lwh/Documents/Code/RL-Scheduling/result/ppo_async_v2/"},
         "disable_env_checking":True,
         "num_workers": 32,
         "num_envs_per_worker": 1,

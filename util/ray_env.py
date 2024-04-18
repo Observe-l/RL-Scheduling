@@ -82,12 +82,25 @@ class Simple_Scheduling(MultiAgentEnv):
             tmp_P23 = round(self.factory[2].product.loc['P23','total'],3)
             tmp_time = round(current_time / 3600,3)
             f_csv.writerow([tmp_time,tmp_A,tmp_B,tmp_P12,tmp_P23])
-        for agent, reward, tmp_file in zip(self.truck_agents, rewards.values(), self.reward_file):
+        with open(self.active_truck_file, 'a') as f:
+            f_csv = writer(f)
+            total_num = 0
+            running_trucks = []
+            for tmp_truck in self.truck_agents:
+                if tmp_truck.state != "waitting":
+                    total_num += 1
+                    running_trucks.append(tmp_truck.id)
+            tmp_time = round(current_time / 3600,3)
+            f_csv.writerow([tmp_time, total_num, running_trucks])
+        truck_pool = [self.truck_agents[i] for i in action_dict.keys()]
+        rew_file_pool = [self.reward_file[i] for i in action_dict.keys()]
+        for agent, reward, tmp_file in zip(truck_pool, rewards.values(), rew_file_pool):
             agent.cumulate_reward += reward
             with open(tmp_file,'a') as f:
                 f_csv = writer(f)
                 tmp_time = round(current_time / 3600,3)
                 f_csv.writerow([tmp_time, reward, agent.cumulate_reward])
+        
 
         if current_time >= 3600*24:
             self.done['__all__'] = True
