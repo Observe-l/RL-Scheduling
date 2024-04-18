@@ -9,7 +9,7 @@ import time
 from util.ray_env import Simple_Scheduling
 
 # Define the policies
-env_config = EnvContext(env_config={"path":"/home/lwh/Documents/Code/RL-Scheduling/result/ppo_base"},worker_index=0)
+env_config = EnvContext(env_config={"path":"/home/lwh/Documents/Code/RL-Scheduling/result/ppo_async"},worker_index=0)
 env = Simple_Scheduling(env_config=env_config)
 
 observation = env.observation_space
@@ -28,7 +28,7 @@ if __name__ == "__main__":
     config = PPOConfig().to_dict()
     config.update({
         "env": Simple_Scheduling,
-        "env_config": {"path":"/home/lwh/Documents/Code/RL-Scheduling/result/ppo_base/"},
+        "env_config": {"path":"/home/lwh/Documents/Code/RL-Scheduling/result/ppo_async/"},
         "disable_env_checking":True,
         "num_workers": 32,
         "num_envs_per_worker": 1,
@@ -41,8 +41,8 @@ if __name__ == "__main__":
             "policy_mapping_fn":policy_mapping_fn,
         }
     })
-    exp_name = "MAPPO_base"
-    stop = {'episodes_total':2000}
+    exp_name = "MAPPO_async"
+    stop = {'episodes_total':2500}
     tunner = tune.Tuner(
         PPO,
         param_space=config,
@@ -52,7 +52,7 @@ if __name__ == "__main__":
             stop=stop,
             checkpoint_config=air.CheckpointConfig(
                 checkpoint_frequency=1,
-                num_to_keep=2000,
+                num_to_keep=2500,
                 checkpoint_score_attribute='episode_reward_mean',
                 checkpoint_at_end=True,
             ),

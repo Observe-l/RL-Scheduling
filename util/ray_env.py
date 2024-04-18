@@ -66,7 +66,7 @@ class Simple_Scheduling(MultiAgentEnv):
         # Resume all trucks to get observation
         self.resume_truck()
         obs = self._get_obs()
-        rewards = self._get_reward()
+        rewards = self._get_reward(action_dict.keys())
         # Park all truck to continue the simulation
         self.park_truck()
         # Reset the flag
@@ -99,8 +99,6 @@ class Simple_Scheduling(MultiAgentEnv):
         Return back a dictionary for both truck and factory agents
         '''
         observation = {}
-        # The agent id. must be integer, start from 0
-        agent_id = 0
         # Shared observation, Storage/Queue from factory
         product_storage = []
         material_storage = []
@@ -122,7 +120,7 @@ class Simple_Scheduling(MultiAgentEnv):
         queue_obs = np.concatenate([product_storage] +[material_storage] + [com_truck_num])
 
         # The truck agents' observation
-        for truck_agent in self.truck_agents:
+        for truck_agent, agent_id in zip(self.truck_agents,range(len(self.truck_agents))):
             distance = []
             # Distance to 3 factories, [0,+inf]
             for factory_agent in self.factory[0:-1]:
@@ -134,9 +132,9 @@ class Simple_Scheduling(MultiAgentEnv):
             destination = int(truck_agent.destination[-1])
             # The state of the truck
             state = truck_agent.get_truck_state()
-            # Store the observation in the dictionary
-            observation[agent_id] = np.concatenate([queue_obs] + [distance] + [com_truck_num] + [[destination]] + [[state]])
-            agent_id += 1
+            # Store the observation in the dictionary if the agent is operable
+            if truck_agent.operable_flag:
+                observation[agent_id] = np.concatenate([queue_obs] + [distance] + [com_truck_num] + [[destination]] + [[state]])
         
         return observation
     
@@ -150,22 +148,17 @@ class Simple_Scheduling(MultiAgentEnv):
             # Assign truck to the new destination
             if agent.operable_flag:
                 agent.delivery(destination=target_id)
-            # If the truck is not operable and the agent assign it to another place, give the penalty
-            elif agent.destination != target_id:
-                self.operable_penalty[agent_id] = -500
+            else:
+                pass
     
-    def _get_reward(self) -> dict:
+    def _get_reward(self, act_keys) -> dict:
         '''
-        Get reward for all agents
+        Get reward for given agents
         '''
         rew = {}
-        # The agent id. must be integer, start from 0
-        agent_id = 0
-        for tmp_agent in self.truck_agents:
+        for agent_id in act_keys:
+            tmp_agent = self.truck_agents[agent_id]
             rew[agent_id] = self.truck_reward(tmp_agent)
-            agent_id += 1
-        # Update the reward. Replace it with the action penalty
-        rew.update({k: self.operable_penalty.get(k, v) for k,v in rew.items()})
         return rew
 
     def truck_reward(self, agent) -> float:
@@ -194,7 +187,7 @@ class Simple_Scheduling(MultiAgentEnv):
         if agent.state == "waitting":
             penalty = -20
         '''
-        
+
         rew = rew_final_product + rew_last_components + distance_reward
         # print("rew: {} ,rew_1: {} ,rew_2: {} ,penalty: {} ,long_rew: {}".format(rew,rew_1,rew_2,penalty,long_rew))
         return rew
@@ -231,7 +224,7 @@ class Simple_Scheduling(MultiAgentEnv):
         for _ in range(100):
             traci.simulationStep()
             tmp_state = [tmp_truck.refresh_state() for tmp_truck in self.truck_agents]
-            self.manager.produce_load()
+            # self.manager.produce_load()
 
     def make_folder(self):
         '''
@@ -242,6 +235,7 @@ class Simple_Scheduling(MultiAgentEnv):
         Path(folder_path).mkdir(parents=True, exist_ok=True)
         # Create file
         self.result_file = folder_path + 'result.csv'
+        self.active_truck_file = folder_path + 'active_truck.csv'
         self.reward_file = []
         # Create reward file
         for agent in self.truck_agents:
@@ -254,6 +248,10 @@ class Simple_Scheduling(MultiAgentEnv):
         with open(self.result_file,'w') as f:
             f_csv = writer(f)
             f_csv.writerow(['time','A','B','P12','P23'])
+        # Create active truck file
+        with open(self.active_truck_file,'w') as f:
+            f_csv = writer(f)
+            f_csv.writerow(['time','total number','running turck'])
     
 
     def resume_truck(self):
