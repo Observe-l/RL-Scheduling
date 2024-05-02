@@ -8,27 +8,41 @@ import numpy as np
 import time
 from util.ray_env import Simple_Scheduling
 
-# Define the policies
-env_config = EnvContext(env_config={"path":"/home/lwh/Documents/Code/RL-Scheduling/result/ppo_async_v2"},worker_index=0)
-env = Simple_Scheduling(env_config=env_config)
-
-observation = env.observation_space
-action = env.action_space
-policies = {}
-for agent_id, obs, act, i in zip(observation.keys(), observation.values(),action.values(),range(len(observation))):
-    policies[f'{agent_id}'] = (None,obs,act,{})
-
-env.stop_env()
 
 def policy_mapping_fn(agent_id, episode, **kwargs):
     return f'{agent_id}'
 
+def get_parameters():
+    parser = optparse.OptionParser(description="Basic parameters")
+    parser.add_option("-l","--lenth",default=500,type=int,help="Step lenth")
+    parser.add_option("-n","--number",default=12,type=int,help="number of ")
+    options, args = parser.parse_args()
+    return options
+
 if __name__ == "__main__":
+    options = get_parameters()
+
+    # Define the policies
+    env_config = EnvContext(env_config={"path":f"/home/lwh/Documents/Code/RL-Scheduling/result/ppo_async_l_{options.lenth}_a_{options.number}",
+                                        "agents":options.number,
+                                        "lenth":options.lenth},
+                                        worker_index=0)
+    env = Simple_Scheduling(env_config=env_config)
+
+    observation = env.observation_space
+    action = env.action_space
+    policies = {}
+    for agent_id, obs, act, i in zip(observation.keys(), observation.values(),action.values(),range(len(observation))):
+        policies[f'{agent_id}'] = (None,obs,act,{})
+    env.stop_env()
+
     ray.init()
     config = PPOConfig().to_dict()
     config.update({
         "env": Simple_Scheduling,
-        "env_config": {"path":"/home/lwh/Documents/Code/RL-Scheduling/result/ppo_async_v2/"},
+        "env_config": {"path":f"/home/lwh/Documents/Code/RL-Scheduling/result/ppo_async_l_{options.lenth}_a_{options.number}",
+                       "agents":options.number,
+                       "lenth":options.lenth},
         "disable_env_checking":True,
         "num_workers": 32,
         "num_envs_per_worker": 1,
@@ -41,7 +55,7 @@ if __name__ == "__main__":
             "policy_mapping_fn":policy_mapping_fn,
         }
     })
-    exp_name = "MAPPO_async"
+    exp_name = f"MAPPO_async_l_{options.lenth}_a_{options.number}"
     stop = {'episodes_total':2500}
     tunner = tune.Tuner(
         PPO,

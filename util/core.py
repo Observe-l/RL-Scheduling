@@ -428,7 +428,6 @@ class product_management(object):
         '''
         Produce new product in all factories
         '''
-
         for tmp_factory in self.factory:
             tmp_factory.produce_product()
             for tmp_truck in self.truck:
@@ -454,7 +453,7 @@ class product_management(object):
             truck_duplicate = [truck.product for truck in self.truck if truck.position == tmp_factory.id and truck.state == 'loading']
             if len(tmp_product) == 2:
                 # loading the product with max storage
-                item = self.factory[2].container.loc[tmp_product,'storage'].idxmin()
+                item = self.factory[2].container.loc[tmp_product,'storage'].idxmax()
                 item_bak = [i for i in tmp_product if i != item][0]
                 if (tmp_factory.container.loc[item,'storage'] > self.truck[0].capacity) and (item not in truck_duplicate) and (len(truck_pool)>0):
                     tmp_result = tmp_factory.load_cargo(truck_pool[0],item)
@@ -509,7 +508,7 @@ class product_management(object):
                         num_truck += 1
                     else:
                         break
-
+        
 class World(object):
     def __init__(self):
         # list of agents 

@@ -11,8 +11,10 @@ from .core import Truck, Factory, product_management
 class Simple_Scheduling(MultiAgentEnv):
     def __init__(self, env_config:EnvContext):
         # 12 Trucks, 4 Factories. The last factory is not agent
-        self.truck_num = 12
+        self.truck_num = env_config['agents']
         self.factory_num = 3
+        # step lenth
+        self.step_lenth = env_config['lenth']
         # init sumo at the begining
         self.init_sumo()
         # Define the observation space and action space.
@@ -57,7 +59,7 @@ class Simple_Scheduling(MultiAgentEnv):
         # Set action
         self._set_action(action_dict)
         # The SUMO simulation
-        for _ in range(500):
+        for _ in range(self.step_lenth):
             traci.simulationStep()
             # Refresh truck state
             tmp_state = [tmp_truck.refresh_state() for tmp_truck in self.truck_agents]
