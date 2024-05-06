@@ -12,7 +12,7 @@ class Simple_Scheduling(MultiAgentEnv):
     def __init__(self, env_config:EnvContext):
         # 12 Trucks, 4 Factories. The last factory is not agent
         self.truck_num = env_config['agents']
-        self.factory_num = 3
+        self.factory_num = 4
         # step lenth
         self.step_lenth = env_config['lenth']
         # init sumo at the begining
@@ -24,7 +24,7 @@ class Simple_Scheduling(MultiAgentEnv):
         for agent_id, tmp_obs in obs.items():
             obs_dim = len(tmp_obs)
             self.observation_space[agent_id] = Box(low=0, high=+np.inf, shape=(obs_dim,),dtype=np.float32)
-            self.action_space[agent_id] = Discrete(3)
+            self.action_space[agent_id] = Discrete(4)
         # The done flag
         self.done = {}
 
@@ -63,7 +63,7 @@ class Simple_Scheduling(MultiAgentEnv):
             traci.simulationStep()
             # Refresh truck state
             tmp_state = [tmp_truck.refresh_state() for tmp_truck in self.truck_agents]
-            self.manager.base_produce_load()
+            self.manager.rl_produce_load()
         
         # Resume all trucks to get observation
         self.resume_truck()
@@ -76,6 +76,7 @@ class Simple_Scheduling(MultiAgentEnv):
 
         # Save the results
         current_time = traci.simulation.getTime()
+
         with open(self.result_file, 'a') as f:
             f_csv = writer(f)
             tmp_A = round(self.factory[2].product.loc['A','total'],3)
@@ -83,25 +84,34 @@ class Simple_Scheduling(MultiAgentEnv):
             tmp_P12 = round(self.factory[1].product.loc['P12','total'],3)
             tmp_P23 = round(self.factory[2].product.loc['P23','total'],3)
             tmp_time = round(current_time / 3600,3)
-            f_csv.writerow([tmp_time,tmp_A,tmp_B,tmp_P12,tmp_P23])
+            result_list = [tmp_time,tmp_A,tmp_B,tmp_P12,tmp_P23]
+            for action, agent, reward in zip(action_dict.values(), self.truck_agents, rewards.values()):
+                agent.cumulate_reward += reward
+                reward_list = [action, reward, agent.cumulate_reward]
+                result_list += reward_list
+            f_csv.writerow(result_list)
+            
         with open(self.active_truck_file, 'a') as f:
             f_csv = writer(f)
             total_num = 0
-            running_trucks = []
+            truck_state = []
             for tmp_truck in self.truck_agents:
+                truck_state += [tmp_truck.state,tmp_truck.operable_flag]
                 if tmp_truck.state != "waitting":
                     total_num += 1
-                    running_trucks.append(tmp_truck.id)
             tmp_time = round(current_time / 3600,3)
-            f_csv.writerow([tmp_time, total_num, running_trucks])
-        truck_pool = [self.truck_agents[i] for i in action_dict.keys()]
-        rew_file_pool = [self.reward_file[i] for i in action_dict.keys()]
-        for agent, reward, tmp_file in zip(truck_pool, rewards.values(), rew_file_pool):
-            agent.cumulate_reward += reward
-            with open(tmp_file,'a') as f:
-                f_csv = writer(f)
-                tmp_time = round(current_time / 3600,3)
-                f_csv.writerow([tmp_time, reward, agent.cumulate_reward])
+            act_list = [tmp_time, total_num]
+            act_list += truck_state
+            f_csv.writerow(act_list)
+
+        # truck_pool = [self.truck_agents[i] for i in action_dict.keys()]
+        # rew_file_pool = [self.reward_file[i] for i in action_dict.keys()]
+        # for agent, reward, tmp_file in zip(truck_pool, rewards.values(), rew_file_pool):
+        #     agent.cumulate_reward += reward
+        #     with open(tmp_file,'a') as f:
+        #         f_csv = writer(f)
+        #         tmp_time = round(current_time / 3600,3)
+        #         f_csv.writerow([tmp_time, reward, agent.cumulate_reward])
         
 
         if current_time >= 3600*24:
@@ -111,7 +121,7 @@ class Simple_Scheduling(MultiAgentEnv):
 
     def _get_obs(self) -> dict:
         '''
-        Return back a dictionary for both truck and factory agents
+        Return back a dictionary for operable agents
         '''
         observation = {}
         # Shared observation, Storage/Queue from factory
@@ -147,9 +157,10 @@ class Simple_Scheduling(MultiAgentEnv):
             destination = int(truck_agent.destination[-1])
             # The state of the truck
             state = truck_agent.get_truck_state()
-            # Store the observation in the dictionary if the agent is operable
-            if truck_agent.operable_flag:
-                observation[agent_id] = np.concatenate([queue_obs] + [distance] + [com_truck_num] + [[destination]] + [[state]])
+            # The transported product
+            product = truck_agent.get_truck_produce()
+
+            observation[agent_id] = np.concatenate([queue_obs] + [distance] + [com_truck_num] + [[destination]] + [[product]] + [[state]])
         
         return observation
     
@@ -198,7 +209,7 @@ class Simple_Scheduling(MultiAgentEnv):
         distance_reward = -3 * np.log(norm_distance)
 
         '''
-        # Penalty, when the truck is idle
+        # Penalty, when the truck is idle['time','total number','running turck']
         if agent.state == "waitting":
             penalty = -20
         '''
@@ -251,22 +262,22 @@ class Simple_Scheduling(MultiAgentEnv):
         # Create file
         self.result_file = folder_path + 'result.csv'
         self.active_truck_file = folder_path + 'active_truck.csv'
-        self.reward_file = []
-        # Create reward file
-        for agent in self.truck_agents:
-            tmp_path = folder_path + agent.id + '.csv'
-            with open(tmp_path,'w') as f:
-                f_csv = writer(f)
-                f_csv.writerow(['time','reward','cumulate reward'])
-            self.reward_file.append(tmp_path)
-        # Create result file
+        # Create result fileflag_reset
         with open(self.result_file,'w') as f:
             f_csv = writer(f)
-            f_csv.writerow(['time','A','B','P12','P23'])
+            result_list = ['time','A','B','P12','P23']
+            for agent in self.truck_agents:
+                agent_list = ['action_'+agent.id,'reward_'+agent.id,'cumulate reward_'+agent.id]
+                result_list += agent_list
+            f_csv.writerow(result_list)
         # Create active truck file
         with open(self.active_truck_file,'w') as f:
             f_csv = writer(f)
-            f_csv.writerow(['time','total number','running turck'])
+            act_truck_list = ['time','total number']
+            for agent in self.truck_agents:
+                agent_list = [f'state_{agent.id}',f'operable_{agent.id}']
+                act_truck_list += agent_list
+            f_csv.writerow(act_truck_list)
     
 
     def resume_truck(self):

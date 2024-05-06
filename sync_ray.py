@@ -2,6 +2,7 @@ import ray
 import os
 from ray import tune, air
 from ray.rllib.algorithms.ppo import PPO, PPOConfig
+from algo.maddpg_torch_rllib.maddpg_torch_model import MADDPGConfig,MADDPG
 from ray.rllib.env.env_context import EnvContext
 import optparse
 import numpy as np
@@ -13,17 +14,25 @@ def policy_mapping_fn(agent_id, episode, **kwargs):
     return f'{agent_id}'
 
 def get_parameters():
-    parser = optparse.OptionParser(description="Basic parameters")
-    parser.add_option("-l","--lenth",default=500,type=int,help="Step lenth")
-    parser.add_option("-n","--number",default=12,type=int,help="number of ")
-    options, args = parser.parse_args()
+    opt = optparse.OptionParser(description="Basic parameters")
+    opt.add_option("-l","--lenth",default=500,type=int,help="Step lenth")
+    opt.add_option("-n","--number",default=12,type=int,help="number of ")
+    opt.add_option("-a","--algorithms",default="PPO",type=str,help="Algorithms")
+    options, args = opt.parse_args()
     return options
 
 if __name__ == "__main__":
     options = get_parameters()
+    if options.algorithms == "MADDPG":
+        algo = MADDPG
+        algo_config = MADDPGConfig
+    else:
+        algo = PPO
+        algo_config = PPOConfig
+    print(f"Using {options.algorithms}")
 
     # Define the policies
-    env_config = EnvContext(env_config={"path":f"/home/lwh/Documents/Code/RL-Scheduling/result/ppo_sync_l_{options.lenth}_a_{options.number}",
+    env_config = EnvContext(env_config={"path":f"/home/lwh/Documents/Code/RL-Scheduling/result/{options.algorithms}_sync_l_{options.lenth}_a_{options.number}",
                                         "agents":options.number,
                                         "lenth":options.lenth},
                                         worker_index=0)
@@ -33,14 +42,14 @@ if __name__ == "__main__":
     action = env.action_space
     policies = {}
     for agent_id, obs, act, i in zip(observation.keys(), observation.values(),action.values(),range(len(observation))):
-        policies[f'{agent_id}'] = (None,obs,act,{})
+        policies[f'{agent_id}'] = (None,obs,act,{"agent_id":i,})
     env.stop_env()
 
     ray.init()
     config = PPOConfig().to_dict()
     config.update({
         "env": Simple_Scheduling,
-        "env_config": {"path":f"/home/lwh/Documents/Code/RL-Scheduling/result/ppo_sync_l_{options.lenth}_a_{options.number}",
+        "env_config": {"path":f"/home/lwh/Documents/Code/RL-Scheduling/result/{options.algorithms}_sync_l_{options.lenth}_a_{options.number}",
                        "agents":options.number,
                        "lenth":options.lenth},
         "disable_env_checking":True,
@@ -55,7 +64,7 @@ if __name__ == "__main__":
             "policy_mapping_fn":policy_mapping_fn,
         }
     })
-    exp_name = f"MAPPO_sync_l_{options.lenth}_a_{options.number}"
+    exp_name = f"{options.algorithms}_sync_l_{options.lenth}_a_{options.number}"
     stop = {'episodes_total':2500}
     tunner = tune.Tuner(
         PPO,

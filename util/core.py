@@ -12,7 +12,7 @@ class Truck(object):
     Function: updata health, move to some positon, fix or broken ...
     '''
     def __init__(self, truck_id:str = 'truck_0', capacity:float = 5.0, weight:float = 0.0,\
-                 state:str = 'delivery', position:str = 'Factory0', destination:str = 'Factory0', product:str = 'A') -> None:
+                 state:str = 'delivery', position:str = 'Factory0', destination:str = 'Factory0', product:str = 'P1') -> None:
         '''
         Parameters:
         truck_id: string
@@ -98,14 +98,15 @@ class Truck(object):
             parking_state = tmp_pk[-1]
 
         self.position = parking_state.stoppingPlaceID
-        self.operable_flag = False
         
         if parking_state.arrival < 0:
             self.state = 'delivery'
+            self.operable_flag = False
             if len(tmp_pk)>1:
                 self.truck_resume()
         elif self.weight == self.capacity and self.position == self.destination:
             self.state = 'pending for unloading'
+            self.operable_flag = True
         elif self.weight == 0:
             self.state = 'waitting'
             self.operable_flag = True
@@ -206,6 +207,7 @@ class Truck(object):
         if self.weight + weight < self.capacity:
             self.weight += weight
             self.state = 'loading'
+            self.operable_flag = False
             # RGBA Blue
             self.color = (0,0,255,255)
             traci.vehicle.setColor(typeID=self.id,color=self.color)
@@ -213,6 +215,7 @@ class Truck(object):
         else:
             self.weight = self.capacity
             self.state = 'pending for delivery'
+            self.operable_flag = True
             # RGBA Red
             self.color = (255,0,0,255)
             traci.vehicle.setColor(typeID=self.id,color=self.color)
@@ -226,6 +229,7 @@ class Truck(object):
         '''
         if weight < self.weight:
             self.state = 'unloading'
+            self.operable_flag = False
             # RGBA Blue
             self.color = (0,0,255,255)
             traci.vehicle.setColor(typeID=self.id,color=self.color)
@@ -236,6 +240,7 @@ class Truck(object):
             remainning_weight = self.weight
             self.weight =0
             self.state = 'waitting'
+            self.operable_flag = True
             # RGBA Green
             self.color = (255,255,0,255)
             traci.vehicle.setColor(typeID=self.id,color=self.color)
@@ -250,11 +255,29 @@ class Truck(object):
         return distance
     
     def get_truck_state(self) -> int:
-        if self.state == 'waitting':
+        if self.operable_flag:
             return 1
         else:
             return 0
-    
+        
+    def get_truck_produce(self) -> int:
+        if self.product == 'P1':
+            return 0
+        elif self.product == 'P2':
+            return 1
+        elif self.product == 'P3':
+            return 2
+        elif self.product == 'P4':
+            return 3
+        elif self.product == 'P12':
+            return 4
+        elif self.product == 'P23':
+            return 5
+        elif self.product == 'A':
+            return 6
+        elif self.product == 'B':
+            return 7
+
     def get_destination(self) -> int:
         truck_destination = int(self.destination[-1])
         return truck_destination
@@ -508,6 +531,48 @@ class product_management(object):
                         num_truck += 1
                     else:
                         break
+    
+    def rl_produce_load(self) -> None:
+        '''
+        RL decide everything
+        '''
+        for tmp_factory in self.factory:
+            tmp_factory.produce_product()
+            for tmp_truck in self.truck:
+                '''
+                unloading cargo when truck is at right place
+                '''
+                if self.transport_idx[tmp_truck.product] == tmp_factory.id:
+                    tmp_factory.unload_cargo(tmp_truck)
+            '''
+            Start loading the product to truck.
+            Only when the product is enough to full the truck
+            '''
+            tmp_product = self.product_idx[tmp_factory.id]
+            truck_pool = [truck for truck in self.truck if truck.position == tmp_factory.id and truck.state == 'waitting']
+
+            # Continue loading
+            truck_continue = [truck for truck in self.truck if truck.position == tmp_factory.id and truck.state == 'loading']
+            for tmp_truck in truck_continue:
+                if tmp_truck.position == tmp_factory.id:
+                    tmp_result = tmp_factory.load_cargo(tmp_truck,tmp_truck.product)
+            
+            # for item in tmp_product:
+                # print(item not in truck_duplicate)
+            truck_duplicate = [truck.product for truck in self.truck if truck.position == tmp_factory.id and truck.state == 'loading']
+            if len(tmp_product) == 2:
+                # loading the product with max storage
+                item = self.factory[2].container.loc[tmp_product,'storage'].idxmax()
+                item_bak = [i for i in tmp_product if i != item][0]
+                if (tmp_factory.container.loc[item,'storage'] > self.truck[0].capacity) and (item not in truck_duplicate) and (len(truck_pool)>0):
+                    tmp_result = tmp_factory.load_cargo(truck_pool[0],item)
+                elif (tmp_factory.container.loc[item_bak,'storage'] > self.truck[0].capacity) and (item_bak not in truck_duplicate) and (len(truck_pool)>0):
+                    tmp_result = tmp_factory.load_cargo(truck_pool[0],item_bak)
+
+            elif len(tmp_product) == 1:
+                item = tmp_product[0]
+                if (tmp_factory.container.loc[item,'storage'] > self.truck[0].capacity) and (item not in truck_duplicate) and (len(truck_pool)>0):
+                    tmp_result = tmp_factory.load_cargo(truck_pool[0],item)
         
 class World(object):
     def __init__(self):
@@ -545,12 +610,7 @@ class World(object):
                 if len(tmp_pk) > 0:
                     latest_pk = tmp_pk[0]
                     if latest_pk.arrival > 0:
-                        traci.vehicle.resume(vehID=agent.id)
-                # try:
-                #     traci.vehicle.resume(vehID=agent.id)
-                # except:
-                #     pass
-        
+                        traci.vehicle.resume(vehID=agent.id)        
         traci.simulationStep()
     
     def park_truck(self):
