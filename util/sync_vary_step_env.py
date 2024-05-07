@@ -13,8 +13,6 @@ class Simple_Scheduling(MultiAgentEnv):
         # 12 Trucks, 4 Factories. The last factory is not agent
         self.truck_num = env_config['agents']
         self.factory_num = 4
-        # step lenth
-        self.step_lenth = env_config['lenth']
         # init sumo at the begining
         self.init_sumo()
         # Define the observation space and action space.
@@ -58,12 +56,21 @@ class Simple_Scheduling(MultiAgentEnv):
         self.operable_penalty = {}
         # Set action
         self._set_action(action_dict)
+        # Run SUMO until all the agents are avaiable
+        sumo_flag = True
+        # Record step lenth
+        step_lenth = 0
         # The SUMO simulation
-        for _ in range(self.step_lenth):
+        while sumo_flag:
             traci.simulationStep()
             # Refresh truck state
             tmp_state = [tmp_truck.refresh_state() for tmp_truck in self.truck_agents]
             self.manager.rl_produce_load()
+            trucks_operable = [tmp_truck.operable_flag for tmp_truck in self.truck_agents]
+            # If all the trucks are operable, break the loop
+            sumo_flag = False if all(trucks_operable) else True
+            step_lenth += 1
+
         
         # Resume all trucks to get observation
         self.resume_truck()
@@ -84,7 +91,7 @@ class Simple_Scheduling(MultiAgentEnv):
             tmp_P12 = round(self.factory[1].product.loc['P12','total'],3)
             tmp_P23 = round(self.factory[2].product.loc['P23','total'],3)
             tmp_time = round(current_time / 3600,3)
-            result_list = [tmp_time,tmp_A,tmp_B,tmp_P12,tmp_P23]
+            result_list = [tmp_time,step_lenth,tmp_A,tmp_B,tmp_P12,tmp_P23]
             for action, agent, reward in zip(action_dict.values(), self.truck_agents, rewards.values()):
                 agent.cumulate_reward += reward
                 reward_list = [action, reward, agent.cumulate_reward]
@@ -214,7 +221,7 @@ class Simple_Scheduling(MultiAgentEnv):
             penalty = -20
         '''
 
-        rew = rew_final_product + rew_last_components
+        rew = rew_final_product + rew_last_components + distance_reward
         # print("rew: {} ,rew_1: {} ,rew_2: {} ,penalty: {} ,long_rew: {}".format(rew,rew_1,rew_2,penalty,long_rew))
         return rew
     
@@ -265,7 +272,7 @@ class Simple_Scheduling(MultiAgentEnv):
         # Create result fileflag_reset
         with open(self.result_file,'w') as f:
             f_csv = writer(f)
-            result_list = ['time','A','B','P12','P23']
+            result_list = ['time','step_lenth','A','B','P12','P23']
             for agent in self.truck_agents:
                 agent_list = ['action_'+agent.id,'reward_'+agent.id,'cumulate reward_'+agent.id]
                 result_list += agent_list
