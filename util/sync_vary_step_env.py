@@ -153,13 +153,8 @@ class Simple_Scheduling(MultiAgentEnv):
 
         # The truck agents' observation
         for truck_agent, agent_id in zip(self.truck_agents,range(len(self.truck_agents))):
-            distance = []
-            # Distance to 3 factories, [0,+inf]
-            for factory_agent in self.factory[0:-1]:
-                tmp_distance = truck_agent.get_distance(factory_agent.id)
-                if tmp_distance < 0:
-                    tmp_distance = 0
-                distance.append(tmp_distance)
+            # axis of the agent
+            axis = truck_agent.get_axis()
             # Current destination
             destination = int(truck_agent.destination[-1])
             # The state of the truck
@@ -167,7 +162,7 @@ class Simple_Scheduling(MultiAgentEnv):
             # The transported product
             product = truck_agent.get_truck_produce()
 
-            observation[agent_id] = np.concatenate([queue_obs] + [distance] + [com_truck_num] + [[destination]] + [[product]] + [[state]])
+            observation[agent_id] = np.concatenate([queue_obs] + [axis] + [com_truck_num] + [[destination]] + [[product]] + [[state]])
         
         return observation
     
@@ -203,9 +198,9 @@ class Simple_Scheduling(MultiAgentEnv):
         # Reward 1: final product * 40
         rew_final_product = 0
         for factory in self.factory:
-            rew_final_product += 40 * factory.step_final_product
+            rew_final_product += 4 * factory.step_final_product
         # Reward 2: Transported component durning last time step
-        rew_last_components = agent.last_transport
+        rew_last_components = 0.1 * agent.last_transport
         
         # Reward 3: depends on the distance of between trucks and the destination 0~8
         distance = agent.get_distance(agent.destination)
@@ -221,7 +216,7 @@ class Simple_Scheduling(MultiAgentEnv):
             penalty = -20
         '''
 
-        rew = rew_final_product + rew_last_components + distance_reward
+        rew = rew_final_product + rew_last_components
         # print("rew: {} ,rew_1: {} ,rew_2: {} ,penalty: {} ,long_rew: {}".format(rew,rew_1,rew_2,penalty,long_rew))
         return rew
     

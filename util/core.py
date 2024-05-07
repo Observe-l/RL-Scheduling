@@ -254,6 +254,10 @@ class Truck(object):
 
         return distance
     
+    def get_axis(self) -> list[float, float]:
+        x_axis, y_axis = traci.vehicle.getPosition(vehID=self.id)
+        return [x_axis, y_axis]
+    
     def get_truck_state(self) -> int:
         if self.operable_flag:
             return 1
