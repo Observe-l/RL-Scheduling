@@ -55,6 +55,8 @@ class Truck(object):
         # record total transported product
         self.total_product = 0.0
         self.last_transport = 0.0
+        # record the produced final product
+        self.step_final_product = 0
         # sumo time
         self.time_step = 0
         # Record the reward
@@ -320,18 +322,17 @@ class Factory(object):
         self.reset()
 
         # The number of pruduced component during last time step
-        self.step_produced_num = 0
         self.step_final_product = 0
         # The number of decreased component during last time step
         self.step_transport = 0
+        # record the number of final product
+        self.final_product = 0
         # self.step_emergency_product = {'Factory0':0, 'Factory1':0, 'Factory2':0, 'Factory3':0}
         # The penalty, when run out of material
         # self.penalty = {'Factory0':0, 'Factory1':0, 'Factory2':0, 'Factory3':0}
 
         # The number of trucks which desitination is current factory or stop at current factory
         self.truck_num = 0
-
-        self.cumulate_reward = 0.0
 
         self.step = 0
 
@@ -341,8 +342,6 @@ class Factory(object):
         '''
         self.product['total'] = [0.0] * len(self.product)
         self.container['storage'] = [0.0]*len(self.container)
-        self.cumulate_reward = 0.0
-
     
     def produce_product(self) -> None:
         '''
@@ -355,9 +354,6 @@ class Factory(object):
             # Storage shouldn't exceed capacity
             item_num = min(tmp_rate,self.container.loc[index,'capacity'] - self.container.loc[index,'storage'])
             item_num = max(item_num, 0)
-
-            # Update the reward for factory agent
-            # self.step_produced_num += item_num
 
             tmp_materials = row['material']
             if type(tmp_materials) == str:
@@ -382,9 +378,9 @@ class Factory(object):
                     self.product.at[index,'total'] = self.product.loc[index,'total'] + item_num
 
                     # Only record the product which need raw materials
-                    self.step_produced_num += item_num
                     if index == 'A' or index == 'B':
                         self.step_final_product += item_num
+                        self.final_product += item_num
 
             # no need any materials
             else:
@@ -633,7 +629,6 @@ class World(object):
     def flag_reset(self):
         for factory_agent in self.manager.factory:
             # The number of pruduced component during last time step
-            factory_agent.step_produced_num = 0
             factory_agent.step_final_product = 0
             # The number of decreased component during last time step
             factory_agent.step_transport = 0
