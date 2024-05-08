@@ -425,14 +425,12 @@ class MADDPGTorchModel(TorchModelV2, nn.Module):
                     "LayerNorm_A_{}".format(i), nn.LayerNorm(n)
                 )
             ins = n
-        '''
-        output dimension is 1
-        '''
+            
         self.policy_model.add_module(
             "action_out",
             SlimFC(
                 ins,
-                1,
+                self.action_dim,
                 initializer=torch.nn.init.xavier_uniform_,
                 activation_fn=None,
             ),

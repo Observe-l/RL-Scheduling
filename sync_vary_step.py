@@ -31,7 +31,7 @@ if __name__ == "__main__":
     print(f"Using {options.algorithms}")
 
     # Define the policies
-    env_config = EnvContext(env_config={"path":f"/home/lwh/Documents/Code/RL-Scheduling/result/{options.algorithms}_sync_vary_a_{options.number}",
+    env_config = EnvContext(env_config={"path":f"/home/lwh/Documents/Code/RL-Scheduling/result/new_rew_{options.algorithms}_sync_vary_a_{options.number}",
                                         "agents":options.number},
                                         worker_index=0)
     env = Simple_Scheduling(env_config=env_config)
@@ -44,12 +44,13 @@ if __name__ == "__main__":
     env.stop_env()
 
     ray.init()
-    config = PPOConfig().to_dict()
+    config = algo_config().to_dict()
     config.update({
         "env": Simple_Scheduling,
-        "env_config": {"path":f"/home/lwh/Documents/Code/RL-Scheduling/result/{options.algorithms}_sync_vary_a_{options.number}",
+        "env_config": {"path":f"/home/lwh/Documents/Code/RL-Scheduling/result/new_rew_{options.algorithms}_sync_vary_a_{options.number}",
                        "agents":options.number},
         "disable_env_checking":True,
+        "framework":"torch",
         "num_workers": 32,
         "num_envs_per_worker": 1,
         "num_cpus_per_worker": 1,
@@ -61,10 +62,10 @@ if __name__ == "__main__":
             "policy_mapping_fn":policy_mapping_fn,
         }
     })
-    exp_name = f"{options.algorithms}_sync_vary_a_{options.number}"
+    exp_name = f"new_rew_{options.algorithms}_sync_vary_a_{options.number}"
     stop = {'episodes_total':2500}
     tunner = tune.Tuner(
-        PPO,
+        algo,
         param_space=config,
         run_config=air.RunConfig(
             log_to_file=True,

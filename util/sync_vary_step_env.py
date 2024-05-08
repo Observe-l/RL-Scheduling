@@ -71,13 +71,8 @@ class Simple_Scheduling(MultiAgentEnv):
             sumo_flag = False if all(trucks_operable) else True
             step_lenth += 1
 
-        
-        # Resume all trucks to get observation
-        self.resume_truck()
         obs = self._get_obs()
         rewards = self._get_reward(action_dict.keys())
-        # Park all truck to continue the simulation
-        self.park_truck()
         # Reset the flag
         self.flag_reset()
 
@@ -94,7 +89,11 @@ class Simple_Scheduling(MultiAgentEnv):
             result_list = [tmp_time,step_lenth,tmp_A,tmp_B,tmp_P12,tmp_P23]
             for action, agent, reward in zip(action_dict.values(), self.truck_agents, rewards.values()):
                 agent.cumulate_reward += reward
-                reward_list = [action, reward, agent.cumulate_reward]
+                if type(action) is int:
+                    act_int = action
+                else:
+                    act_int = np.argmax(action)
+                reward_list = [act_int, reward, agent.cumulate_reward]
                 result_list += reward_list
             f_csv.writerow(result_list)
             
@@ -110,16 +109,6 @@ class Simple_Scheduling(MultiAgentEnv):
             act_list = [tmp_time, total_num]
             act_list += truck_state
             f_csv.writerow(act_list)
-
-        # truck_pool = [self.truck_agents[i] for i in action_dict.keys()]
-        # rew_file_pool = [self.reward_file[i] for i in action_dict.keys()]
-        # for agent, reward, tmp_file in zip(truck_pool, rewards.values(), rew_file_pool):
-        #     agent.cumulate_reward += reward
-        #     with open(tmp_file,'a') as f:
-        #         f_csv = writer(f)
-        #         tmp_time = round(current_time / 3600,3)
-        #         f_csv.writerow([tmp_time, reward, agent.cumulate_reward])
-        
 
         if current_time >= 3600*24:
             self.done['__all__'] = True
@@ -172,7 +161,11 @@ class Simple_Scheduling(MultiAgentEnv):
         '''
         for agent_id, action in actions.items():
             agent = self.truck_agents[agent_id]
-            target_id = self.factory[action].id
+            if type(action) is int:
+                act_int = action
+            else:
+                act_int = np.argmax(action)
+            target_id = self.factory[act_int].id
             # Assign truck to the new destination
             if agent.operable_flag:
                 agent.delivery(destination=target_id)
@@ -280,32 +273,7 @@ class Simple_Scheduling(MultiAgentEnv):
                 agent_list = [f'state_{agent.id}',f'operable_{agent.id}']
                 act_truck_list += agent_list
             f_csv.writerow(act_truck_list)
-    
 
-    def resume_truck(self):
-        '''
-        resume all truck from parking area to get the distance
-        '''
-        for agent in self.truck_agents:
-            tmp_pk = traci.vehicle.getStops(vehID=agent.id)
-            if len(tmp_pk) > 0:
-                latest_pk = tmp_pk[0]
-                if latest_pk.arrival > 0:
-                    traci.vehicle.resume(vehID=agent.id)
-        traci.simulationStep()
-    
-    def park_truck(self):
-        '''
-        put all truck back to the parking area
-        '''
-        for agent in self.truck_agents:
-            try:
-                traci.vehicle.setParkingAreaStop(vehID=agent.id, stopID=agent.destination)
-            except:
-                pass
-        for _ in range(5):
-            traci.simulationStep()
-    
     def flag_reset(self):
         for factory_agent in self.factory:
             # The number of pruduced component during last time step
