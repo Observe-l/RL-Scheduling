@@ -16,7 +16,7 @@ def policy_mapping_fn(agent_id, episode, **kwargs):
 def get_parameters():
     opt = optparse.OptionParser(description="Basic parameters")
     opt.add_option("-n","--number",default=12,type=int,help="number of agents")
-    opt.add_option("-a","--algorithms",default="PPO",type=str,help="Algorithms")
+    opt.add_option("-a","--algorithms",default="MAPPO",type=str,help="Algorithms")
     options, args = opt.parse_args()
     return options
 

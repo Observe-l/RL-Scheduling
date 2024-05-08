@@ -89,7 +89,7 @@ class Simple_Scheduling(MultiAgentEnv):
             result_list = [tmp_time,step_lenth,tmp_A,tmp_B,tmp_P12,tmp_P23]
             for action, agent, reward in zip(action_dict.values(), self.truck_agents, rewards.values()):
                 agent.cumulate_reward += reward
-                if type(action) is int:
+                if type(action) is np.int32:
                     act_int = action
                 else:
                     act_int = np.argmax(action)
@@ -161,7 +161,7 @@ class Simple_Scheduling(MultiAgentEnv):
         '''
         for agent_id, action in actions.items():
             agent = self.truck_agents[agent_id]
-            if type(action) is int:
+            if type(action) is np.int32:
                 act_int = action
             else:
                 act_int = np.argmax(action)
