@@ -67,14 +67,14 @@ class Simple_Scheduling(MultiAgentEnv):
             tmp_state = [tmp_truck.refresh_state() for tmp_truck in self.truck_agents]
             self.manager.rl_produce_load()
             trucks_operable = [tmp_truck.operable_flag for tmp_truck in self.truck_agents]
-            # If all the trucks are operable, break the loop
+            # If any of the trucks are operable, break the loop
             sumo_flag = False if any(trucks_operable) else True
             step_lenth += 1
 
         obs = self._get_obs()
         rewards = self._get_reward(action_dict.keys())
         # Reset the flag
-        self.flag_reset()
+        self.flag_reset(action_dict.keys())
 
         # Save the results
         current_time = traci.simulation.getTime()
@@ -87,8 +87,9 @@ class Simple_Scheduling(MultiAgentEnv):
             tmp_P23 = round(self.factory[2].product.loc['P23','total'],3)
             tmp_time = round(current_time / 3600,3)
             result_list = [tmp_time,step_lenth,tmp_A,tmp_B,tmp_P12,tmp_P23]
-            # Record to action and reward
-            for action, agent, reward in zip(action_dict.values(), self.truck_agents, rewards.values()):
+            for action_id, action in action_dict.items():
+                agent = self.truck_agents[action_id]
+                reward = rewards[action_id]
                 agent.cumulate_reward += reward
                 reward_list = [action, reward, agent.cumulate_reward]
                 result_list += reward_list
@@ -106,16 +107,6 @@ class Simple_Scheduling(MultiAgentEnv):
             act_list = [tmp_time, total_num]
             act_list += truck_state
             f_csv.writerow(act_list)
-
-        # truck_pool = [self.truck_agents[i] for i in action_dict.keys()]
-        # rew_file_pool = [self.reward_file[i] for i in action_dict.keys()]
-        # for agent, reward, tmp_file in zip(truck_pool, rewards.values(), rew_file_pool):
-        #     agent.cumulate_reward += reward
-        #     with open(tmp_file,'a') as f:
-        #         f_csv = writer(f)
-        #         tmp_time = round(current_time / 3600,3)
-        #         f_csv.writerow([tmp_time, reward, agent.cumulate_reward])
-        
 
         if current_time >= 3600*24:
             self.done['__all__'] = True
@@ -154,11 +145,12 @@ class Simple_Scheduling(MultiAgentEnv):
             # Current destination
             destination = int(truck_agent.destination[-1])
             # The state of the truck
-            state = truck_agent.get_truck_state()
+            # state = truck_agent.get_truck_state()
             # The transported product
             product = truck_agent.get_truck_produce()
+
             if truck_agent.operable_flag:
-                observation[agent_id] = np.concatenate([queue_obs] + [axis] + [com_truck_num] + [[destination]] + [[product]] + [[state]])
+                observation[agent_id] = np.concatenate([queue_obs] + [axis] + [[destination]] + [[product]])
         
         return observation
     
@@ -168,7 +160,11 @@ class Simple_Scheduling(MultiAgentEnv):
         '''
         for agent_id, action in actions.items():
             agent = self.truck_agents[agent_id]
-            target_id = self.factory[action].id
+            if type(action) is np.int32:
+                act_int = action
+            else:
+                act_int = np.argmax(action)
+            target_id = self.factory[act_int].id
             # Assign truck to the new destination
             if agent.operable_flag:
                 agent.delivery(destination=target_id)
@@ -191,16 +187,13 @@ class Simple_Scheduling(MultiAgentEnv):
         The reward depends on the waitting time and the number of product transported during last time step
         '''
 
-        # Reward 1: final product * 4
-        cur_final_product = 0
+        # Reward 1: final product * 40
+        final_step = 0
         for factory in self.factory:
-            # Get the cumulate final product
-            cur_final_product += factory.final_product
-        # Calculate the reward
-        rew_final_product = 4 * (cur_final_product - agent.step_final_product)
-        # Record the current final product number
-        agent.step_final_product = cur_final_product
-
+            final_step += factory.final_product
+        rew_final_product = 4 * (final_step - agent.step_final_product)
+        # Update the record
+        agent.step_final_product = rew_final_product
         # Reward 2: Transported component durning last time step
         rew_last_components = 0.1 * agent.last_transport
         
@@ -221,22 +214,6 @@ class Simple_Scheduling(MultiAgentEnv):
         rew = rew_final_product + rew_last_components
         # print("rew: {} ,rew_1: {} ,rew_2: {} ,penalty: {} ,long_rew: {}".format(rew,rew_1,rew_2,penalty,long_rew))
         return rew
-    
-    def shared_reward(self) -> float:
-        '''
-        Long-term shared reward
-        '''
-        rew_trans = 0
-        rew_product = 0
-
-        # Reward 1: Total transportated product during last time step, 0-50
-        # Reward 2: Number of final product 0-50
-        # P1=1, P2=10
-        for factory in self.factory:
-            rew_trans +=  1 * factory.step_transport
-            rew_product += 40 * factory.step_final_product
-        shared_rew = rew_trans + rew_product
-        return shared_rew
 
     def init_sumo(self):
         try:
@@ -282,39 +259,14 @@ class Simple_Scheduling(MultiAgentEnv):
                 agent_list = [f'state_{agent.id}',f'operable_{agent.id}']
                 act_truck_list += agent_list
             f_csv.writerow(act_truck_list)
-    
 
-    def resume_truck(self):
-        '''
-        resume all truck from parking area to get the distance
-        '''
-        for agent in self.truck_agents:
-            tmp_pk = traci.vehicle.getStops(vehID=agent.id)
-            if len(tmp_pk) > 0:
-                latest_pk = tmp_pk[0]
-                if latest_pk.arrival > 0:
-                    traci.vehicle.resume(vehID=agent.id)
-        traci.simulationStep()
-    
-    def park_truck(self):
-        '''
-        put all truck back to the parking area
-        '''
-        for agent in self.truck_agents:
-            try:
-                traci.vehicle.setParkingAreaStop(vehID=agent.id, stopID=agent.destination)
-            except:
-                pass
-        for _ in range(5):
-            traci.simulationStep()
-    
-    def flag_reset(self):
+    def flag_reset(self, act_keys):
         for factory_agent in self.factory:
-            # The number of pruduced component during last time step
-            factory_agent.step_final_product = 0
-        for truck in self.truck_agents:
+            # The number of decreased component during last time step
+            factory_agent.step_transport = 0
+        for truck_id in act_keys:
             # Reset the number of transported goods
-            truck.last_transport = 0
+            self.truck_agents[truck_id].last_transport = 0
 
     def stop_env(self):
         traci.close()

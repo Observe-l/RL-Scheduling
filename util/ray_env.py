@@ -155,7 +155,7 @@ class Simple_Scheduling(MultiAgentEnv):
             # The transported product
             product = truck_agent.get_truck_produce()
 
-            observation[agent_id] = np.concatenate([queue_obs] + [axis] + [com_truck_num] + [[destination]] + [[product]] + [[state]])
+            observation[agent_id] = np.concatenate([queue_obs] + [axis] + [[destination]] + [[product]] + [[state]])
         
         return observation
     
