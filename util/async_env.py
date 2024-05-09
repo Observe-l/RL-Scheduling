@@ -27,6 +27,7 @@ class Simple_Scheduling(MultiAgentEnv):
         self.done = {}
 
         self.episode_num = 0
+        self.record_num = 0
         self.path = env_config['path'] + f'/{env_config.worker_index}'
 
     def reset(self):
@@ -37,6 +38,7 @@ class Simple_Scheduling(MultiAgentEnv):
         self.make_folder()
         # Count the episode num
         self.episode_num += 1
+        self.record_num = 0
         # Init SUMO
         self.init_sumo()
         # Get init observation
@@ -78,35 +80,37 @@ class Simple_Scheduling(MultiAgentEnv):
 
         # Save the results
         current_time = traci.simulation.getTime()
+        if (current_time // 500) > self.record_num:
+            self.record_num +=1
+            with open(self.result_file, 'a') as f:
+                f_csv = writer(f)
+                tmp_A = round(self.factory[2].product.loc['A','total'],3)
+                tmp_B = round(self.factory[3].product.loc['B','total'],3)
+                tmp_P12 = round(self.factory[1].product.loc['P12','total'],3)
+                tmp_P23 = round(self.factory[2].product.loc['P23','total'],3)
+                tmp_time = round(current_time / 3600,3)
+                result_list = [tmp_time,step_lenth,tmp_A,tmp_B,tmp_P12,tmp_P23]
+                for act_id in range(len(self.truck_agents)):
+                    if act_id not in action_dict.keys():
+                        result_list += ["nan","nan",self.truck_agents[act_id].cumulate_reward]
+                    else:
+                        self.truck_agents[act_id].cumulate_reward += rewards[act_id]
+                        result_list += [action_dict[act_id],rewards[act_id],self.truck_agents[act_id].cumulate_reward]
 
-        with open(self.result_file, 'a') as f:
-            f_csv = writer(f)
-            tmp_A = round(self.factory[2].product.loc['A','total'],3)
-            tmp_B = round(self.factory[3].product.loc['B','total'],3)
-            tmp_P12 = round(self.factory[1].product.loc['P12','total'],3)
-            tmp_P23 = round(self.factory[2].product.loc['P23','total'],3)
-            tmp_time = round(current_time / 3600,3)
-            result_list = [tmp_time,step_lenth,tmp_A,tmp_B,tmp_P12,tmp_P23]
-            for action_id, action in action_dict.items():
-                agent = self.truck_agents[action_id]
-                reward = rewards[action_id]
-                agent.cumulate_reward += reward
-                reward_list = [action, reward, agent.cumulate_reward]
-                result_list += reward_list
-            f_csv.writerow(result_list)
-            
-        with open(self.active_truck_file, 'a') as f:
-            f_csv = writer(f)
-            total_num = 0
-            truck_state = []
-            for tmp_truck in self.truck_agents:
-                truck_state += [tmp_truck.state,tmp_truck.operable_flag]
-                if tmp_truck.state != "waitting":
-                    total_num += 1
-            tmp_time = round(current_time / 3600,3)
-            act_list = [tmp_time, total_num]
-            act_list += truck_state
-            f_csv.writerow(act_list)
+                f_csv.writerow(result_list)
+                
+            with open(self.active_truck_file, 'a') as f:
+                f_csv = writer(f)
+                total_num = 0
+                truck_state = []
+                for tmp_truck in self.truck_agents:
+                    truck_state += [tmp_truck.state,tmp_truck.operable_flag]
+                    if tmp_truck.operable_flag:
+                        total_num += 1
+                tmp_time = round(current_time / 3600,3)
+                act_list = [tmp_time, total_num]
+                act_list += truck_state
+                f_csv.writerow(act_list)
 
         if current_time >= 3600*24:
             self.done['__all__'] = True
@@ -193,7 +197,7 @@ class Simple_Scheduling(MultiAgentEnv):
             final_step += factory.final_product
         rew_final_product = 4 * (final_step - agent.step_final_product)
         # Update the record
-        agent.step_final_product = rew_final_product
+        agent.step_final_product = final_step
         # Reward 2: Transported component durning last time step
         rew_last_components = 0.1 * agent.last_transport
         

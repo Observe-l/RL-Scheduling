@@ -2,6 +2,7 @@ import ray
 import os
 from ray import tune, air
 from ray.rllib.algorithms.ppo import PPO, PPOConfig
+from ray.rllib.algorithms.dqn import DQN, DQNConfig
 from ray.rllib.env.env_context import EnvContext
 import optparse
 import numpy as np
@@ -15,13 +16,21 @@ def policy_mapping_fn(agent_id, episode, **kwargs):
 def get_parameters():
     opt = optparse.OptionParser(description="Basic parameters")
     opt.add_option("-n","--number",default=12,type=int,help="number of agents")
+    opt.add_option("-a","--algorithms",default="MAPPO",type=str,help="Algorithms")
     options, args = opt.parse_args()
     return options
 
 if __name__ == "__main__":
     options = get_parameters()
+    if options.algorithms == "DQN":
+        algo = DQN
+        algo_config = DQNConfig
+    else:
+        algo = PPO
+        algo_config = PPOConfig
+    print(f"Using {options.algorithms}")
     # Define the policies
-    env_config = EnvContext(env_config={"path":f"/home/lwh/Documents/Code/RL-Scheduling/result/MAPPO_async_vary_a_{options.number}",
+    env_config = EnvContext(env_config={"path":f"/home/lwh/Documents/Code/RL-Scheduling/result/{options.algorithms}_async_vary_a_{options.number}",
                                         "agents":options.number},
                                         worker_index=0)
     env = Simple_Scheduling(env_config=env_config)
@@ -34,10 +43,10 @@ if __name__ == "__main__":
     env.stop_env()
 
     ray.init()
-    config = PPOConfig().to_dict()
+    config = algo_config().to_dict()
     config.update({
         "env": Simple_Scheduling,
-        "env_config": {"path":f"/home/lwh/Documents/Code/RL-Scheduling/result/MAPPO_async_vary_a_{options.number}",
+        "env_config": {"path":f"/home/lwh/Documents/Code/RL-Scheduling/result/{options.algorithms}_async_vary_a_{options.number}",
                        "agents":options.number},
         "disable_env_checking":True,
         "framework":"torch",
@@ -52,10 +61,10 @@ if __name__ == "__main__":
             "policy_mapping_fn":policy_mapping_fn,
         }
     })
-    exp_name = f"MAPPO_async_vary_a_{options.number}"
+    exp_name = f"{options.algorithms}_async_vary_a_{options.number}"
     stop = {'episodes_total':2500}
     tunner = tune.Tuner(
-        PPO,
+        algo,
         param_space=config,
         run_config=air.RunConfig(
             log_to_file=True,
