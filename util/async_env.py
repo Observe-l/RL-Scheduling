@@ -2,20 +2,18 @@ import gymnasium as gym
 # import traci
 import libsumo as traci
 import numpy as np
+import random
 from gymnasium.spaces import Discrete, Box
-from ray.rllib.env.multi_agent_env import MultiAgentEnv
-from ray.rllib.env.env_context import EnvContext
 from csv import writer
 from pathlib import Path
 from .core import Truck, Factory, product_management
+import string
 
-class Simple_Scheduling(MultiAgentEnv):
-    def __init__(self, env_config:EnvContext):
+class async_scheduling(gym.Env):
+    def __init__(self, env_config:dict = None):
         # 12 Trucks, 4 Factories. The last factory is not agent
-        self.truck_num = env_config['agents']
-        self.factory_num = 4
-        # step lenth
-        self.step_lenth = env_config['lenth']
+        self.truck_num = 12
+        self.factory_num = 50
         # init sumo at the begining
         self.init_sumo()
         # Define the observation space and action space.
@@ -25,12 +23,13 @@ class Simple_Scheduling(MultiAgentEnv):
         for agent_id, tmp_obs in obs.items():
             obs_dim = len(tmp_obs)
             self.observation_space[agent_id] = Box(low=0, high=+np.inf, shape=(obs_dim,),dtype=np.float32)
-            self.action_space[agent_id] = Discrete(4)
+            self.action_space[agent_id] = Discrete(self.factory_num)
         # The done flag
         self.done = {}
 
         self.episode_num = 0
-        self.path = env_config['path'] + f'/{env_config.worker_index}'
+        random_string = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+        self.path = f"/home/lwh/Documents/Code/RL-Scheduling/result/mappo/exp_{random_string}"
 
     def reset(self):
         '''
@@ -55,16 +54,22 @@ class Simple_Scheduling(MultiAgentEnv):
         Compute the environment dynamics given the actions of each agent.
         Return a dictionary of observations, rewards, dones (indicating whether the episode is finished), and info.
         '''
-        # Reset the penalty before excute action
-        self.operable_penalty = {}
         # Set action
         self._set_action(action_dict)
+        # Run SUMO until all the agents are avaiable
+        sumo_flag = True
+        # Record step lenth
+        step_lenth = 0
         # The SUMO simulation
-        for _ in range(self.step_lenth):
+        while sumo_flag:
             traci.simulationStep()
             # Refresh truck state
             tmp_state = [tmp_truck.refresh_state() for tmp_truck in self.truck_agents]
             self.manager.rl_produce_load()
+            trucks_operable = [tmp_truck.operable_flag for tmp_truck in self.truck_agents]
+            # If any of the trucks are operable, break the loop
+            sumo_flag = False if any(trucks_operable) else True
+            step_lenth += 1
         
         # Resume all trucks to get observation
         self.resume_truck()
@@ -74,47 +79,37 @@ class Simple_Scheduling(MultiAgentEnv):
         self.park_truck()
         # Reset the flag
         self.flag_reset()
-
         # Save the results
-        current_time = traci.simulation.getTime()
-
-        with open(self.result_file, 'a') as f:
+        current_time = round(traci.simulation.getTime() / 3600, 3)
+        with open(self.product_file, 'a') as f:
             f_csv = writer(f)
-            tmp_A = round(self.factory[2].product.loc['A','total'],3)
-            tmp_B = round(self.factory[3].product.loc['B','total'],3)
-            tmp_P12 = round(self.factory[1].product.loc['P12','total'],3)
-            tmp_P23 = round(self.factory[2].product.loc['P23','total'],3)
-            tmp_time = round(current_time / 3600,3)
-            result_list = [tmp_time,tmp_A,tmp_B,tmp_P12,tmp_P23]
-            for action, agent, reward in zip(action_dict.values(), self.truck_agents, rewards.values()):
-                agent.cumulate_reward += reward
-                reward_list = [action, reward, agent.cumulate_reward]
-                result_list += reward_list
-            f_csv.writerow(result_list)
-            
-        with open(self.active_truck_file, 'a') as f:
-            f_csv = writer(f)
-            total_num = 0
-            truck_state = []
-            for tmp_truck in self.truck_agents:
-                truck_state += [tmp_truck.state,tmp_truck.operable_flag]
-                if tmp_truck.state != "waitting":
-                    total_num += 1
-            tmp_time = round(current_time / 3600,3)
-            act_list = [tmp_time, total_num]
-            act_list += truck_state
-            f_csv.writerow(act_list)
-
-        # truck_pool = [self.truck_agents[i] for i in action_dict.keys()]
-        # rew_file_pool = [self.reward_file[i] for i in action_dict.keys()]
-        # for agent, reward, tmp_file in zip(truck_pool, rewards.values(), rew_file_pool):
-        #     agent.cumulate_reward += reward
-        #     with open(tmp_file,'a') as f:
-        #         f_csv = writer(f)
-        #         tmp_time = round(current_time / 3600,3)
-        #         f_csv.writerow([tmp_time, reward, agent.cumulate_reward])
+            tmp_A = round(self.factory[45].product.loc['A','total'],3)
+            tmp_B = round(self.factory[46].product.loc['B','total'],3)
+            tmp_C = round(self.factory[47].product.loc['C','total'],3)
+            tmp_D = round(self.factory[48].product.loc['D','total'],3)
+            tmp_E = round(self.factory[49].product.loc['E','total'],3)
+            total = tmp_A+tmp_B+tmp_C+tmp_D+tmp_E
+            product_list = [current_time,step_lenth,total,tmp_A,tmp_B,tmp_C,tmp_D,tmp_E]
+            f_csv.writerow(product_list)
         
-
+        with open(self.agent_file, 'a') as f:
+            f_csv = writer(f)
+            agent_list = [current_time, step_lenth]
+            for tmp_agent in self.truck_agents:
+                if tmp_agent.id in action_dict.keys():
+                    tmp_agent.cumulate_reward += rewards[tmp_agent.id]
+                    agent_list += [action_dict[tmp_agent.id], rewards[tmp_agent.id], tmp_agent.cumulate_reward]
+                else:
+                    agent_list += [None, None, tmp_agent.cumulate_reward]
+            f_csv.writerow(agent_list)
+        
+        with open(self.distance_file, 'a') as f:
+            f_csv = writer(f)
+            distance_list = [current_time]
+            for tmp_agent in self.truck_agents:
+                distance_list += [tmp_agent.step_distance, tmp_agent.driving_distance]
+            f_csv.writerow(distance_list)
+        
         if current_time >= 3600*24:
             self.done['__all__'] = True
 
@@ -145,8 +140,10 @@ class Simple_Scheduling(MultiAgentEnv):
             com_truck_num.append(tmp_truck_num)
         queue_obs = np.concatenate([product_storage] +[material_storage] + [com_truck_num])
 
-        # The truck agents' observation
-        for truck_agent, agent_id in zip(self.truck_agents,range(len(self.truck_agents))):
+        # The truck agents' observation. Only use the truck that operable.
+        operable_trucks = [tmp_truck for tmp_truck in self.truck_agents if tmp_truck.operable_flag]
+        for truck_agent in operable_trucks:
+        # for truck_agent, agent_id in zip(self.truck_agents,range(len(self.truck_agents))):
             distance = []
             # Distance to 3 factories, [0,+inf]
             for factory_agent in self.factory[0:-1]:
@@ -160,8 +157,8 @@ class Simple_Scheduling(MultiAgentEnv):
             state = truck_agent.get_truck_state()
             # The transported product
             product = truck_agent.get_truck_produce()
-
-            observation[agent_id] = np.concatenate([queue_obs] + [distance] + [com_truck_num] + [[destination]] + [[product]] + [[state]])
+            agent_id = int(truck_agent.id.split('_')[1])
+            observation[agent_id] = np.concatenate([queue_obs] + [distance] + [[destination]] + [[product]] + [[state]])
         
         return observation
     
@@ -193,47 +190,48 @@ class Simple_Scheduling(MultiAgentEnv):
         Calculate reward for the given truck agent.
         The reward depends on the waitting time and the number of product transported during last time step
         '''
-
-        # Reward 1: final product * 40
+        # First factor: unit profile
         rew_final_product = 0
         for factory in self.factory:
             rew_final_product += 40 * factory.step_final_product
-        # Reward 2: Transported component durning last time step
-        rew_last_components = agent.last_transport
+        # Second factor: driving cost
+        gk = 0.001
+        fk = 0.002
+        if agent.weight == 0:
+            uk = gk+fk
+        else:
+            uk = gk
+        rew_driving = uk * agent.step_distance
+
+        # Third factor: asset cost
+        rew_ass = 10
+
+        # Penalty factor
+        gamma1 = 0.5
+        gamma2 = 0.5
+        rq = 1
+        tq = agent.time_step
+        sq = gamma1 * tq + gamma2 * (1-rq)
+        psq = np.log((1-sq)/(1+sq))
+
+        rew = rew_final_product - rew_driving - rew_ass - psq
+
+        # # Reward 1: final product * 40
+
+        # # Reward 2: Transported component durning last time step
+        # rew_last_components = agent.last_transport
         
-        # Reward 3: depends on the distance of between trucks and the destination 0~8
-        distance = agent.get_distance(agent.destination)
-        if distance < 0:
-            distance = 1
-        # Normalize the distance (min-max scale), assume maximum distance is 5000
-        norm_distance = distance / 5000
-        distance_reward = -3 * np.log(norm_distance)
+        # # Reward 3: depends on the distance of between trucks and the destination 0~8
+        # distance = agent.get_distance(agent.destination)
+        # if distance < 0:
+        #     distance = 1
+        # # Normalize the distance (min-max scale), assume maximum distance is 5000
+        # norm_distance = distance / 5000
+        # distance_reward = -3 * np.log(norm_distance)
 
-        '''
-        # Penalty, when the truck is idle['time','total number','running turck']
-        if agent.state == "waitting":
-            penalty = -20
-        '''
-
-        rew = rew_final_product + rew_last_components
+        # rew = rew_final_product + rew_last_components + distance_reward
         # print("rew: {} ,rew_1: {} ,rew_2: {} ,penalty: {} ,long_rew: {}".format(rew,rew_1,rew_2,penalty,long_rew))
         return rew
-    
-    def shared_reward(self) -> float:
-        '''
-        Long-term shared reward
-        '''
-        rew_trans = 0
-        rew_product = 0
-
-        # Reward 1: Total transportated product during last time step, 0-50
-        # Reward 2: Number of final product 0-50
-        # P1=1, P2=10
-        for factory in self.factory:
-            rew_trans +=  1 * factory.step_transport
-            rew_product += 40 * factory.step_final_product
-        shared_rew = rew_trans + rew_product
-        return shared_rew
 
     def init_sumo(self):
         try:
@@ -241,13 +239,39 @@ class Simple_Scheduling(MultiAgentEnv):
             print('restart sumo')
         except:
             pass
-        traci.start(["sumo", "-c", "map/3km_1week/osm.sumocfg","--threads","20","--no-warnings","True"])
+        traci.start(["sumo", "-c", "map/sg_map/osm.sumocfg","--no-warnings","True"])
         self.truck_agents = [Truck(truck_id='truck_'+str(i)) for i in range(self.truck_num)]
-        self.factory = [Factory(factory_id='Factory0', produce_rate=[['P1',5,None,None]]),
-                Factory(factory_id='Factory1', produce_rate=[['P2',10,None,None],['P12',2.5,'P1,P2','1,1']]),
-                Factory(factory_id='Factory2', produce_rate=[['P3',5,None,None],['P23',2.5,'P2,P3','1,1'],['A',2.5,'P12,P3','1,1']]),
-                Factory(factory_id='Factory3', produce_rate=[['P4',5,None,None],['B',2.5,'P23,P4','1,1']])]
-        self.manager = product_management(self.factory, self.truck_agents)
+        # Add factory 0 ~ 44
+        self.factory = [Factory(factory_id=f'Factory{i}',produce_rate=[[f'P{i}',5,None,None]]) for i in range(45)]
+        # Add factory 45 ~ 49
+        '''
+        Random raw material list. Each final product has 9 raw materials.
+        '''
+        final_products = ['A', 'B', 'C', 'D', 'E']
+        remaining_materials = [f'P{i}' for i in range(45)]
+        transport_idx = {}
+        random.shuffle(remaining_materials)
+        for i, product in enumerate(final_products):
+            tmp_factory_id = f'Factory{45 + i}'
+            tmp_materials = [remaining_materials.pop() for _ in range(9)]
+            tmp_produce_rate = [[product, 5, ','.join(tmp_materials), ','.join(['1']*len(tmp_materials))]]
+            tmp_factory = Factory(factory_id=tmp_factory_id, produce_rate=tmp_produce_rate)
+            self.factory.append(tmp_factory)
+            for transport_material in tmp_materials:
+                transport_idx[transport_material] = tmp_factory_id
+
+        '''
+        Fix material list
+        '''
+        # final_product_details = {
+        #     'A': (['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9'], 'Factory45'),
+        #     'B': (['P10', 'P11', 'P12', 'P13', 'P14', 'P15', 'P16', 'P17', 'P18'], 'Factory46'),
+        #     'C': (['P19', 'P20', 'P21', 'P22', 'P23', 'P24', 'P25', 'P26', 'P27'], 'Factory47'),
+        #     'D': (['P28', 'P29', 'P30', 'P31', 'P32', 'P33', 'P34', 'P35', 'P36'], 'Factory48'),
+        #     'E': (['P37', 'P38', 'P39', 'P40', 'P41', 'P42', 'P43', 'P44', 'P45'], 'Factory49'),
+        # }
+
+        self.manager = product_management(self.factory, self.truck_agents, transport_idx)
         for _ in range(100):
             traci.simulationStep()
             tmp_state = [tmp_truck.refresh_state() for tmp_truck in self.truck_agents]
@@ -261,25 +285,31 @@ class Simple_Scheduling(MultiAgentEnv):
         folder_path = self.path + '/{}/'.format(self.episode_num)
         Path(folder_path).mkdir(parents=True, exist_ok=True)
         # Create file
-        self.result_file = folder_path + 'result.csv'
-        self.active_truck_file = folder_path + 'active_truck.csv'
-        # Create result fileflag_reset
-        with open(self.result_file,'w') as f:
+        self.product_file = folder_path + 'product.csv'
+        self.agent_file = folder_path + 'result.csv'
+        self.distance_file = folder_path + 'distance.csv'
+        # Create result file
+        with open(self.product_file,'w') as f:
             f_csv = writer(f)
-            result_list = ['time','A','B','P12','P23']
+            result_list = ['time', 'step_length', 'total', 'A', 'B', 'C', 'D', 'E']
+            f_csv.writerow(result_list)
+        
+        with open(self.agent_file, 'w') as f:
+            f_csv = writer(f)
+            result_list = ['time', 'step_length']
             for agent in self.truck_agents:
                 agent_list = ['action_'+agent.id,'reward_'+agent.id,'cumulate reward_'+agent.id]
                 result_list += agent_list
             f_csv.writerow(result_list)
+
         # Create active truck file
-        with open(self.active_truck_file,'w') as f:
+        with open(self.distance_file,'w') as f:
             f_csv = writer(f)
-            act_truck_list = ['time','total number']
+            distance_list = ['time']
             for agent in self.truck_agents:
-                agent_list = [f'state_{agent.id}',f'operable_{agent.id}']
-                act_truck_list += agent_list
-            f_csv.writerow(act_truck_list)
-    
+                agent_list = [f'step_{agent.id}', f'total_{agent.id}']
+                distance_list += agent_list
+            f_csv.writerow(distance_list)
 
     def resume_truck(self):
         '''

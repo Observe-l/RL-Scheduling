@@ -1,4 +1,5 @@
-import traci
+# import traci
+import libsumo as traci
 import numpy as np
 import pandas as pd
 from csv import writer
@@ -12,7 +13,7 @@ class Truck(object):
     Function: updata health, move to some positon, fix or broken ...
     '''
     def __init__(self, truck_id:str = 'truck_0', capacity:float = 5.0, weight:float = 0.0,\
-                 state:str = 'delivery', position:str = 'Factory0', destination:str = 'Factory0', product:str = 'P1') -> None:
+                 state:str = 'delivery', product:str = 'P1', factory_number:int = 50) -> None:
         '''
         Parameters:
         truck_id: string
@@ -28,23 +29,26 @@ class Truck(object):
         self.id = truck_id
         self.truck = True
 
-        self.reset(weight,state,position,destination,product)
+        # Random select the init postion
+        init_position = f'Factory{random.randint(0,factory_number-1)}'
+
+        self.reset(weight,state,init_position,product)
 
         self.capacity = capacity
     
-    def reset(self,weight:float = 0.0, state:str = 'delivery', position:str = 'Factory0', destination:str = 'Factory0', product:str = 'A'):
+    def reset(self,weight:float = 0.0, state:str = 'delivery', init_position:str = 'Factory0', product:str = 'A'):
         # Create truck in sumo. If the truck already exist, remove it first
         try:
-            traci.vehicle.add(vehID=self.id, routeID=position + '_to_'+ destination, typeID='truck')
+            traci.vehicle.add(vehID=self.id, routeID=init_position + '_to_'+ init_position, typeID='truck')
         except:
             traci.vehicle.remove(vehID=self.id)
-            traci.vehicle.add(vehID=self.id, routeID=position + '_to_'+ destination, typeID='truck')
-        traci.vehicle.setParkingAreaStop(vehID=self.id,stopID=position)
+            traci.vehicle.add(vehID=self.id, routeID=init_position + '_to_'+ init_position, typeID='truck')
+        traci.vehicle.setParkingAreaStop(vehID=self.id,stopID=init_position)
 
         self.weight = weight
         self.state = state
-        self.position = position
-        self.destination = destination
+        self.position = init_position
+        self.destination = init_position
         self.product = product
         # RGBA Green
         self.color = (255,255,0,255)
@@ -59,6 +63,10 @@ class Truck(object):
         self.time_step = 0
         # Record the reward
         self.cumulate_reward = 0.0
+        # reset the driving distance
+        self.driving_distance = 0.0
+        self.last_distance = 0.0
+        self.step_distance = 0.0
 
     def update_truck(self, capacity:float = 10000.0, weight:float = 0.0,\
                      state:str = 'delivery', position:str = 'Factory0', destination:str = 'Factory0') -> None:
@@ -98,6 +106,7 @@ class Truck(object):
             parking_state = tmp_pk[-1]
 
         self.position = parking_state.stoppingPlaceID
+        self.time_step += 1
         
         if parking_state.arrival < 0:
             self.state = 'delivery'
@@ -110,7 +119,8 @@ class Truck(object):
         elif self.weight == 0:
             self.state = 'waitting'
             self.operable_flag = True
-
+        
+        self.refresh_distance()
         return {'state':self.state, 'postion':self.position}
 
 
@@ -254,6 +264,27 @@ class Truck(object):
 
         return distance
     
+    def refresh_distance(self) -> None:
+        current_distance = traci.vehicle.getDistance(vehID=self.id)
+        # If the vehicle is reseted, the dirving distance will become 0
+        if current_distance >= self.driving_distance:
+            # Update the driving distance of each time step
+            self.step_distance = current_distance - self.driving_distance
+            # Update the total driving distance
+            self.driving_distance = current_distance
+        elif current_distance >= self.last_distance:
+            # Update the driving distance of each time step
+            self.step_distance = current_distance - self.last_distance
+            # Update the total driving distance
+            self.driving_distance += self.step_distance
+            self.last_distance = current_distance
+        else:
+            # Update the driving distance of each time step
+            self.step_distance = current_distance
+            # Update the total driving distance
+            self.driving_distance += self.step_distance
+            self.last_distance = current_distance    
+
     def get_truck_state(self) -> int:
         if self.operable_flag:
             return 1
@@ -261,22 +292,10 @@ class Truck(object):
             return 0
         
     def get_truck_produce(self) -> int:
-        if self.product == 'P1':
-            return 0
-        elif self.product == 'P2':
-            return 1
-        elif self.product == 'P3':
-            return 2
-        elif self.product == 'P4':
-            return 3
-        elif self.product == 'P12':
-            return 4
-        elif self.product == 'P23':
-            return 5
-        elif self.product == 'A':
-            return 6
-        elif self.product == 'B':
-            return 7
+        if self.product.startswith('P'):
+            return int(self.product[1:])
+        else:
+            return ord(self.product) - ord('A') + 45
 
     def get_destination(self) -> int:
         truck_destination = int(self.destination[-1])
@@ -288,12 +307,10 @@ class Factory(object):
     '''
     The class of factory
     '''
-    def __init__(self, factory_id:str = 'Factory0', produce_rate:list = [['P1',0.0001,None,None]], 
-                 container:list = ['P1','P2','P3','P4','P12','P23','A','B'],
-                 product_source:dict = {'P1':'Factory0',
-                                        'P2':'Factory1', 'P12':'Factory1',
-                                        'P3':'Factory2', 'P23':'Factory2','A':'Factory2',
-                                        'P4':'Factory3', 'B':'Factory3'}) -> None:
+    def __init__(self, factory_id:str = 'Factory0',
+                 produce_rate:list = [['P1',0.0001,None,None]], 
+                 input_container = None,
+                 input_product_source = None) -> None:
         '''
         Parameters:
         factory_id: string
@@ -303,6 +320,20 @@ class Factory(object):
         '''
         self.id = factory_id
         self.truck = False
+
+        '''
+        Generate container and list of product source
+        '''
+        # Source material
+        material_list = [f'P{i}' for i in range(45)]
+        # Product list
+        product_list = ['A', 'B', 'C', 'D', 'E']
+        container = input_container if input_container else material_list + product_list
+        if input_product_source is None:
+            product_source = {mat: f'Factory{index}' for index, mat in enumerate(material_list)}
+            product_source.update({prod: f'Factory{45 + product_list.index(prod)}' for prod in product_list})
+        else:
+            pass
 
         # Create a dataframe to record the products which are produced in current factory
         self.product= pd.DataFrame(produce_rate,columns=['product','rate','material','ratio'])
@@ -362,12 +393,6 @@ class Factory(object):
 
                 tmp_storage = self.container.loc[tmp_materials,'storage'].to_numpy()
 
-                # # Calculate Penalty. If the raw material, give a penalty
-                # for remain_material, single_ratio in zip(tmp_materials,tmp_ratio):
-                #     if self.container.loc[remain_material,'storage'] <= single_ratio*tmp_rate:
-                #         tmp_source_factory = self.container.loc[remain_material,'source']
-                #         self.penalty[tmp_source_factory] -= 0.05
-
                 # Check storage
                 if (tmp_storage > tmp_ratio*tmp_rate).all() and self.container.loc[index,'capacity'] > self.container.loc[index,'storage']:
                     # Consume the material
@@ -379,7 +404,7 @@ class Factory(object):
 
                     # Only record the product which need raw materials
                     self.step_produced_num += item_num
-                    if index == 'A' or index == 'B':
+                    if index == 'A' or index == 'B' or index == 'C' or index == 'D' or index == 'E':
                         self.step_final_product += item_num
 
             # no need any materials
@@ -428,24 +453,20 @@ class product_management(object):
     '''
     product new product, load cargo, etc.
     '''
-    def __init__(self, factory:list, truck:list) -> None:
+    def __init__(self, factory:list, truck:list, transport_idx: dict) -> None:
         '''
         Input the list of factories and the trucks
-        Producding order:
-        Factory0: produce P1
-        Facotry1: produce P2, P12
-        Factory2: produce P3, P23, A(P123)
-        Factory3: produce P4, B(P234)
         '''
         self.factory = factory
         self.truck = truck
-        self.p = np.array([1.0, 1.0, 1.0, 1.0, truck[0].capacity])
-        # Create the dictionary for product
-        # self.product_idx = {tmp_factory.id:tmp_factory.product.index.values.tolist() for tmp_factory in self.factory}
-        self.product_idx = {'Factory0':['P1'],'Factory1':['P12','P2'],'Factory2':['P23'],'Factory3':[]}
-        self.transport_idx = {'P1':'Factory1',
-                              'P2':'Factory2','P12':'Factory2',
-                              'P23':'Factory3'}
+        # Create the dictionary for product and raw material
+        # self.product_idx = {'Factory0':['P1'],'Factory1':['P12','P2'],'Factory2':['P23'],'Factory3':[]}
+        material_list = [f'P{i}' for i in range(45)]
+        self.product_idx = {f'Factory{index}': mat for index, mat in enumerate(material_list)}
+        self.transport_idx = transport_idx
+        # self.transport_idx = {'P1':'Factory1',
+        #                       'P2':'Factory2','P12':'Factory2',
+        #                       'P23':'Factory3'}
     
     def produce_load(self) -> None:
         '''
