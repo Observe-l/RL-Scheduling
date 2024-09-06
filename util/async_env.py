@@ -201,9 +201,9 @@ class async_scheduling(MultiAgentEnv):
         gk = 0.001
         fk = 0.002
         if agent.weight == 0:
-            uk = gk+fk
-        else:
             uk = gk
+        else:
+            uk = gk + fk
         rew_driving = uk * agent.step_distance
 
         # Third factor: asset cost
