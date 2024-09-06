@@ -13,7 +13,8 @@ class Truck(object):
     Function: updata health, move to some positon, fix or broken ...
     '''
     def __init__(self, truck_id:str = 'truck_0', capacity:float = 5.0, weight:float = 0.0,\
-                 state:str = 'delivery', product:str = 'P1', factory_number:int = 50) -> None:
+                 state:str = 'delivery', product:str = 'P1', factory_number:int = 50,\
+                 factory_edge:dict = None,) -> None:
         '''
         Parameters:
         truck_id: string
@@ -31,6 +32,7 @@ class Truck(object):
 
         # Random select the init postion
         init_position = f'Factory{random.randint(0,factory_number-1)}'
+        self.factory_edge = factory_edge
 
         self.reset(weight,state,init_position,product)
 
@@ -124,48 +126,48 @@ class Truck(object):
         return {'state':self.state, 'postion':self.position}
 
 
-    def truck_stop(self) -> None:
-        '''
-        When truck broken or we decide to repair / maintain the truck,
-        use this function to stop the truck first
-        Time-based function
-        '''
-        # The truck shouldn't break at factory road, otherwise, let it move to the end of the road
-        current_edge = traci.vehicle.getRoadID(vehID=self.id)
-        factory_idx = ['Factory0','Factory1','Factory2','Factory3']
-        # arrive the destination
-        if self.destination == current_edge:
-            if self.weight == 0:
-                self.recover_state = 'waitting'
-            else:
-                self.recover_state = 'pending for unloading'
-        # start from current factory
-        elif current_edge in factory_idx:
-            self.recover_state = 'delivery'
-            try:
-                # stop after 20 meters barking
-                traci.vehicle.setStop(vehID=self.id,edgeID=traci.vehicle.getRoadID(vehID=self.id),pos=150)
-            except:
-                # stop at next edge. the length of the edge must longer than 25m
-                tmp_idx = traci.vehicle.getRouteIndex(vehID=self.id)
-                tmp_edge = traci.vehicle.getRoute(vehID=self.id)[tmp_idx+2]
-                traci.vehicle.setStop(vehID=self.id,edgeID=tmp_edge,pos=0)
-        else:
-            self.recover_state = 'delivery'
-            try:
-                # stop after 20 meters barking
-                traci.vehicle.setStop(vehID=self.id,edgeID=traci.vehicle.getRoadID(vehID=self.id),pos=traci.vehicle.getLanePosition(vehID=self.id)+25)
-            except:
-                # stop at next edge. the length of the edge must longer than 25m
-                tmp_idx = traci.vehicle.getRouteIndex(vehID=self.id)
-                try:
-                    tmp_edge = traci.vehicle.getRoute(vehID=self.id)[tmp_idx+1]
-                    traci.vehicle.setStop(vehID=self.id,edgeID=tmp_edge,pos=25)
-                except:
-                    if self.weight == 0:
-                        self.recover_state = 'waitting'
-                    else:
-                        self.recover_state = 'pending for unloading'
+    # def truck_stop(self) -> None:
+    #     '''
+    #     When truck broken or we decide to repair / maintain the truck,
+    #     use this function to stop the truck first
+    #     Time-based function
+    #     '''
+    #     # The truck shouldn't break at factory road, otherwise, let it move to the end of the road
+    #     current_edge = traci.vehicle.getRoadID(vehID=self.id)
+    #     factory_idx = ['Factory0','Factory1','Factory2','Factory3']
+    #     # arrive the destination
+    #     if self.destination == current_edge:
+    #         if self.weight == 0:
+    #             self.recover_state = 'waitting'
+    #         else:
+    #             self.recover_state = 'pending for unloading'
+    #     # start from current factory
+    #     elif current_edge in factory_idx:
+    #         self.recover_state = 'delivery'
+    #         try:
+    #             # stop after 20 meters barking
+    #             traci.vehicle.setStop(vehID=self.id,edgeID=traci.vehicle.getRoadID(vehID=self.id),pos=150)
+    #         except:
+    #             # stop at next edge. the length of the edge must longer than 25m
+    #             tmp_idx = traci.vehicle.getRouteIndex(vehID=self.id)
+    #             tmp_edge = traci.vehicle.getRoute(vehID=self.id)[tmp_idx+2]
+    #             traci.vehicle.setStop(vehID=self.id,edgeID=tmp_edge,pos=0)
+    #     else:
+    #         self.recover_state = 'delivery'
+    #         try:
+    #             # stop after 20 meters barking
+    #             traci.vehicle.setStop(vehID=self.id,edgeID=traci.vehicle.getRoadID(vehID=self.id),pos=traci.vehicle.getLanePosition(vehID=self.id)+25)
+    #         except:
+    #             # stop at next edge. the length of the edge must longer than 25m
+    #             tmp_idx = traci.vehicle.getRouteIndex(vehID=self.id)
+    #             try:
+    #                 tmp_edge = traci.vehicle.getRoute(vehID=self.id)[tmp_idx+1]
+    #                 traci.vehicle.setStop(vehID=self.id,edgeID=tmp_edge,pos=25)
+    #             except:
+    #                 if self.weight == 0:
+    #                     self.recover_state = 'waitting'
+    #                 else:
+    #                     self.recover_state = 'pending for unloading'
     
     def truck_resume(self) -> None:
         tmp_pk = traci.vehicle.getStops(vehID=self.id)
@@ -183,7 +185,7 @@ class Truck(object):
         self.operable_flag = False
         # Remove vehicle first, add another truck. (If we want to use the dijkstra algorithm in SUMO, we must creat new vehicle)
         self.destination = destination
-        traci.vehicle.changeTarget(vehID=self.id, edgeID=destination)
+        traci.vehicle.changeTarget(vehID=self.id, edgeID=self.factory_edge[destination])
         # Move out the car parking area
         try:
             traci.vehicle.resume(vehID=self.id)
@@ -258,9 +260,9 @@ class Truck(object):
             return ('not enough', remainning_weight)
     
     def get_distance(self, positon) -> float:
-        traci.vehicle.changeTarget(vehID=self.id, edgeID=positon)
-        distance = traci.vehicle.getDrivingDistance(vehID=self.id, edgeID=positon, pos=0)
-        traci.vehicle.changeTarget(vehID=self.id, edgeID=self.destination)
+        traci.vehicle.changeTarget(vehID=self.id, edgeID=self.factory_edge[positon])
+        distance = traci.vehicle.getDrivingDistance(vehID=self.id, edgeID=self.factory_edge[positon], position=0)
+        traci.vehicle.changeTarget(vehID=self.id, edgeID=self.factory_edge[self.destination])
 
         return distance
     
@@ -462,7 +464,9 @@ class product_management(object):
         # Create the dictionary for product and raw material
         # self.product_idx = {'Factory0':['P1'],'Factory1':['P12','P2'],'Factory2':['P23'],'Factory3':[]}
         material_list = [f'P{i}' for i in range(45)]
-        self.product_idx = {f'Factory{index}': mat for index, mat in enumerate(material_list)}
+        self.product_idx = {f'Factory{index}': [mat] for index, mat in enumerate(material_list)}
+        for i in range(5):
+            self.product_idx[f'Factory{i+45}'] = []
         self.transport_idx = transport_idx
         # self.transport_idx = {'P1':'Factory1',
         #                       'P2':'Factory2','P12':'Factory2',
@@ -578,10 +582,9 @@ class product_management(object):
                 if tmp_truck.position == tmp_factory.id:
                     tmp_result = tmp_factory.load_cargo(tmp_truck,tmp_truck.product)
             
-            # for item in tmp_product:
-                # print(item not in truck_duplicate)
             truck_duplicate = [truck.product for truck in self.truck if truck.position == tmp_factory.id and truck.state == 'loading']
             if len(tmp_product) == 2:
+                print(tmp_product)
                 # loading the product with max storage
                 item = self.factory[2].container.loc[tmp_product,'storage'].idxmax()
                 item_bak = [i for i in tmp_product if i != item][0]
@@ -594,66 +597,3 @@ class product_management(object):
                 item = tmp_product[0]
                 if (tmp_factory.container.loc[item,'storage'] > self.truck[0].capacity) and (item not in truck_duplicate) and (len(truck_pool)>0):
                     tmp_result = tmp_factory.load_cargo(truck_pool[0],item)
-        
-class World(object):
-    def __init__(self):
-        # list of agents 
-        self.agents = []
-        # factory load/product manager
-        self.manager = []
-        
-    
-    def step(self):
-        '''
-        update the world
-        '''
-        traci.simulationStep()
-        for agent in self.agents:
-            # Refresh the state of the truck
-            if agent.truck:
-                agent.refresh_state()
-
-        self.manager.produce_load()
-    
-    def truck_agents(self):
-        return [agent for agent in self.agents if agent.truck]
-    
-    def factory_agents(self):
-        return [agent for agent in self.agents if not agent.truck]
-    
-    def resume_truck(self):
-        '''
-        resume all truck from parking area to get the distance
-        '''
-        for agent in self.agents:
-            if agent.truck:
-                tmp_pk = traci.vehicle.getStops(vehID=agent.id)
-                if len(tmp_pk) > 0:
-                    latest_pk = tmp_pk[0]
-                    if latest_pk.arrival > 0:
-                        traci.vehicle.resume(vehID=agent.id)        
-        traci.simulationStep()
-    
-    def park_truck(self):
-        '''
-        put all truck back to the parking area
-        '''
-        for agent in self.agents:
-            if agent.truck:
-                try:
-                    traci.vehicle.setParkingAreaStop(vehID=agent.id, stopID=agent.destination)
-                except:
-                    pass
-        for _ in range(5):
-            traci.simulationStep()
-    
-    def flag_reset(self):
-        for factory_agent in self.manager.factory:
-            # The number of pruduced component during last time step
-            factory_agent.step_produced_num = 0
-            factory_agent.step_final_product = 0
-            # The number of decreased component during last time step
-            factory_agent.step_transport = 0
-            # factory_agent.step_emergency_product = {'Factory0':0, 'Factory1':0, 'Factory2':0, 'Factory3':0}
-            # The penalty, when run out of material
-            # factory_agent.penalty = {'Factory0':0, 'Factory1':0, 'Factory2':0, 'Factory3':0}

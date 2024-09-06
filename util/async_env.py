@@ -8,9 +8,11 @@ from csv import writer
 from pathlib import Path
 from .core import Truck, Factory, product_management
 import string
+import xml.etree.ElementTree as ET
+from ray.rllib.env.multi_agent_env import MultiAgentEnv
 
-class async_scheduling(gym.Env):
-    def __init__(self, env_config:dict = None):
+class async_scheduling(MultiAgentEnv):
+    def __init__(self, env_config):
         # 12 Trucks, 4 Factories. The last factory is not agent
         self.truck_num = 12
         self.factory_num = 50
@@ -29,7 +31,7 @@ class async_scheduling(gym.Env):
 
         self.episode_num = 0
         random_string = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
-        self.path = f"/home/lwh/Documents/Code/RL-Scheduling/result/mappo/exp_{random_string}"
+        self.path = f"/home/lwh/Documents/Code/RL-Scheduling/result/{env_config['algo']}/exp_{random_string}"
 
     def reset(self):
         '''
@@ -96,11 +98,12 @@ class async_scheduling(gym.Env):
             f_csv = writer(f)
             agent_list = [current_time, step_lenth]
             for tmp_agent in self.truck_agents:
-                if tmp_agent.id in action_dict.keys():
-                    tmp_agent.cumulate_reward += rewards[tmp_agent.id]
-                    agent_list += [action_dict[tmp_agent.id], rewards[tmp_agent.id], tmp_agent.cumulate_reward]
+                agent_id = int(tmp_agent.id.split('_')[1])
+                if agent_id in action_dict.keys():
+                    tmp_agent.cumulate_reward += rewards[agent_id]
+                    agent_list += [action_dict[agent_id], rewards[agent_id], tmp_agent.cumulate_reward]
                 else:
-                    agent_list += [None, None, tmp_agent.cumulate_reward]
+                    agent_list += ['NA', 'NA', tmp_agent.cumulate_reward]
             f_csv.writerow(agent_list)
         
         with open(self.distance_file, 'a') as f:
@@ -145,8 +148,8 @@ class async_scheduling(gym.Env):
         for truck_agent in operable_trucks:
         # for truck_agent, agent_id in zip(self.truck_agents,range(len(self.truck_agents))):
             distance = []
-            # Distance to 3 factories, [0,+inf]
-            for factory_agent in self.factory[0:-1]:
+            # Distance to 45 factories, [0,+inf]
+            for factory_agent in self.factory[:45]:
                 tmp_distance = truck_agent.get_distance(factory_agent.id)
                 if tmp_distance < 0:
                     tmp_distance = 0
@@ -210,11 +213,16 @@ class async_scheduling(gym.Env):
         gamma1 = 0.5
         gamma2 = 0.5
         rq = 1
-        tq = agent.time_step
-        sq = gamma1 * tq + gamma2 * (1-rq)
+        tq = 5000 if agent.time_step >= 5000 else agent.time_step
+        sq = gamma1 * tq/5000 + gamma2 * (1-rq)
         psq = np.log((1-sq)/(1+sq))
 
-        rew = rew_final_product - rew_driving - rew_ass - psq
+        # Short-term reward. Arrive right factory
+        rew_short = agent.last_transport
+        if rew_short != 0:
+            print(f"{agent.id} transport {rew_short} {agent.product}")
+
+        rew = rew_final_product + rew_short - rew_driving - rew_ass - psq
 
         # # Reward 1: final product * 40
 
@@ -230,7 +238,6 @@ class async_scheduling(gym.Env):
         # distance_reward = -3 * np.log(norm_distance)
 
         # rew = rew_final_product + rew_last_components + distance_reward
-        # print("rew: {} ,rew_1: {} ,rew_2: {} ,penalty: {} ,long_rew: {}".format(rew,rew_1,rew_2,penalty,long_rew))
         return rew
 
     def init_sumo(self):
@@ -240,7 +247,11 @@ class async_scheduling(gym.Env):
         except:
             pass
         traci.start(["sumo", "-c", "map/sg_map/osm.sumocfg","--no-warnings","True"])
-        self.truck_agents = [Truck(truck_id='truck_'+str(i)) for i in range(self.truck_num)]
+        # Get the lane id
+        parking_xml = "map/sg_map/factory.prk.xml"
+        parking_dict = self.xml_dict(parking_xml)
+
+        self.truck_agents = [Truck(truck_id='truck_'+str(i), factory_edge=parking_dict) for i in range(self.truck_num)]
         # Add factory 0 ~ 44
         self.factory = [Factory(factory_id=f'Factory{i}',produce_rate=[[f'P{i}',5,None,None]]) for i in range(45)]
         # Add factory 45 ~ 49
@@ -310,6 +321,22 @@ class async_scheduling(gym.Env):
                 agent_list = [f'step_{agent.id}', f'total_{agent.id}']
                 distance_list += agent_list
             f_csv.writerow(distance_list)
+    
+    def xml_dict(self, xml_file) -> dict:
+        '''
+        Get data from xml file.
+        Use in the traci api
+        '''
+        tree = ET.parse(xml_file)
+        root = tree.getroot()
+        parking_dict = {}
+        for parking_area in root.findall('parkingArea'):
+            parking_id = parking_area.get('id')
+            lane = parking_area.get('lane')
+            if lane.endswith('_0'):
+                lane = lane[:-2]
+            parking_dict[parking_id] = lane
+        return parking_dict
 
     def resume_truck(self):
         '''
