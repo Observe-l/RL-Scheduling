@@ -67,7 +67,7 @@ class async_scheduling(MultiAgentEnv):
             traci.simulationStep()
             # Refresh truck state
             tmp_state = [tmp_truck.refresh_state() for tmp_truck in self.truck_agents]
-            self.manager.rl_produce_load()
+            self.manager.async_rl_produce_load()
             trucks_operable = [tmp_truck.operable_flag for tmp_truck in self.truck_agents]
             # If any of the trucks are operable, break the loop
             sumo_flag = False if any(trucks_operable) else True
@@ -93,6 +93,8 @@ class async_scheduling(MultiAgentEnv):
             total = tmp_A+tmp_B+tmp_C+tmp_D+tmp_E
             product_list = [current_time,step_lenth,total,tmp_A,tmp_B,tmp_C,tmp_D,tmp_E]
             f_csv.writerow(product_list)
+            if total != 0:
+                print(f"Successful produce A:{tmp_A}, B:{tmp_B}, C:{tmp_C}, D:{tmp_D}, E:{tmp_E}")
         
         with open(self.agent_file, 'a') as f:
             f_csv = writer(f)
@@ -113,7 +115,7 @@ class async_scheduling(MultiAgentEnv):
                 distance_list += [tmp_agent.step_distance, tmp_agent.driving_distance]
             f_csv.writerow(distance_list)
         
-        if current_time >= 3600*24:
+        if current_time >= 24:
             self.done['__all__'] = True
 
         return obs, rewards, self.done, {}
@@ -157,7 +159,8 @@ class async_scheduling(MultiAgentEnv):
             # Current destination
             destination = int(truck_agent.destination[-1])
             # The state of the truck
-            state = truck_agent.get_truck_state()
+            # state = truck_agent.get_truck_state()
+            state = truck_agent.weight
             # The transported product
             product = truck_agent.get_truck_produce()
             agent_id = int(truck_agent.id.split('_')[1])
@@ -219,8 +222,8 @@ class async_scheduling(MultiAgentEnv):
 
         # Short-term reward. Arrive right factory
         rew_short = agent.last_transport
-        if rew_short != 0:
-            print(f"{agent.id} transport {rew_short} {agent.product}")
+        # Reset the short_term reward
+        agent.last_transport = 0
 
         rew = rew_final_product + rew_short - rew_driving - rew_ass - psq
 
@@ -261,7 +264,8 @@ class async_scheduling(MultiAgentEnv):
         final_products = ['A', 'B', 'C', 'D', 'E']
         remaining_materials = [f'P{i}' for i in range(45)]
         transport_idx = {}
-        random.shuffle(remaining_materials)
+        # Generate random index
+        # random.shuffle(remaining_materials)
         for i, product in enumerate(final_products):
             tmp_factory_id = f'Factory{45 + i}'
             tmp_materials = [remaining_materials.pop() for _ in range(9)]
@@ -270,17 +274,6 @@ class async_scheduling(MultiAgentEnv):
             self.factory.append(tmp_factory)
             for transport_material in tmp_materials:
                 transport_idx[transport_material] = tmp_factory_id
-
-        '''
-        Fix material list
-        '''
-        # final_product_details = {
-        #     'A': (['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9'], 'Factory45'),
-        #     'B': (['P10', 'P11', 'P12', 'P13', 'P14', 'P15', 'P16', 'P17', 'P18'], 'Factory46'),
-        #     'C': (['P19', 'P20', 'P21', 'P22', 'P23', 'P24', 'P25', 'P26', 'P27'], 'Factory47'),
-        #     'D': (['P28', 'P29', 'P30', 'P31', 'P32', 'P33', 'P34', 'P35', 'P36'], 'Factory48'),
-        #     'E': (['P37', 'P38', 'P39', 'P40', 'P41', 'P42', 'P43', 'P44', 'P45'], 'Factory49'),
-        # }
 
         self.manager = product_management(self.factory, self.truck_agents, transport_idx)
         for _ in range(100):
@@ -370,9 +363,9 @@ class async_scheduling(MultiAgentEnv):
             # The number of decreased component during last time step
             factory_agent.step_transport = 0
             # factory_agent.step_emergency_product = {'Factory0':0, 'Factory1':0, 'Factory2':0, 'Factory3':0}
-        for truck in self.truck_agents:
+        # for truck in self.truck_agents:
             # Reset the number of transported goods
-            truck.last_transport = 0
+            # truck.last_transport = 0
 
     def stop_env(self):
         traci.close()

@@ -597,3 +597,47 @@ class product_management(object):
                 item = tmp_product[0]
                 if (tmp_factory.container.loc[item,'storage'] > self.truck[0].capacity) and (item not in truck_duplicate) and (len(truck_pool)>0):
                     tmp_result = tmp_factory.load_cargo(truck_pool[0],item)
+        
+    def async_rl_produce_load(self) -> None:
+        '''
+        Let truck go to right destination
+        '''
+        for tmp_factory in self.factory:
+            tmp_factory.produce_product()
+            for tmp_truck in self.truck:
+                '''
+                unloading cargo when truck is at right place
+                '''
+                if self.transport_idx[tmp_truck.product] == tmp_factory.id:
+                    tmp_factory.unload_cargo(tmp_truck)
+            '''
+            Start loading the product to truck.
+            Only when the product is enough to full the truck
+            '''
+            tmp_product = self.product_idx[tmp_factory.id]
+            truck_pool = [truck for truck in self.truck if truck.position == tmp_factory.id and truck.state == 'waitting']
+
+            # Continue loading
+            truck_continue = [truck for truck in self.truck if truck.position == tmp_factory.id and truck.state == 'loading']
+            for tmp_truck in truck_continue:
+                if tmp_truck.position == tmp_factory.id:
+                    tmp_result = tmp_factory.load_cargo(tmp_truck,tmp_truck.product)
+                    # Send truck to right destination. Only focus on scheduling.
+                    if tmp_result == 'full':
+                        tmp_truck.delivery(self.transport_idx[tmp_truck.product])
+            
+            truck_duplicate = [truck.product for truck in self.truck if truck.position == tmp_factory.id and truck.state == 'loading']
+            if len(tmp_product) == 2:
+                print(tmp_product)
+                # loading the product with max storage
+                item = self.factory[2].container.loc[tmp_product,'storage'].idxmax()
+                item_bak = [i for i in tmp_product if i != item][0]
+                if (tmp_factory.container.loc[item,'storage'] > self.truck[0].capacity) and (item not in truck_duplicate) and (len(truck_pool)>0):
+                    tmp_result = tmp_factory.load_cargo(truck_pool[0],item)
+                elif (tmp_factory.container.loc[item_bak,'storage'] > self.truck[0].capacity) and (item_bak not in truck_duplicate) and (len(truck_pool)>0):
+                    tmp_result = tmp_factory.load_cargo(truck_pool[0],item_bak)
+
+            elif len(tmp_product) == 1:
+                item = tmp_product[0]
+                if (tmp_factory.container.loc[item,'storage'] > self.truck[0].capacity) and (item not in truck_duplicate) and (len(truck_pool)>0):
+                    tmp_result = tmp_factory.load_cargo(truck_pool[0],item)

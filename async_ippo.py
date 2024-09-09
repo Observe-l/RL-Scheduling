@@ -1,6 +1,6 @@
 import ray
 from ray import tune, air
-from ray.rllib.algorithms.dqn.dqn import DQN, DQNConfig
+from ray.rllib.algorithms.ppo import PPO, PPOConfig
 from ray.rllib.env.env_context import EnvContext
 from util.async_env import async_scheduling
 
@@ -9,7 +9,7 @@ def policy_mapping_fn(agent_id, episode, **kwargs):
 
 
 if __name__ == "__main__":
-    env_config = EnvContext(env_config={"algo":"async-DQN"},worker_index=0)
+    env_config = EnvContext(env_config={"algo":"async-iPPO-simple"},worker_index=0)
     env = async_scheduling(env_config)
     observation = env.observation_space
     action = env.action_space
@@ -19,10 +19,10 @@ if __name__ == "__main__":
     env.stop_env()
 
     ray.init()
-    config = DQNConfig().to_dict()
+    config = PPOConfig().to_dict()
     config.update({
         "env": async_scheduling,
-        "env_config": {"algo":"async-DQN"},
+        "env_config": {"algo":"async-iPPO-simple"},
         "disable_env_checking":True,
         "num_workers": 32,
         "num_envs_per_worker": 1,
@@ -35,10 +35,10 @@ if __name__ == "__main__":
         }
     })
 
-    exp_name = "async_DQN"
+    exp_name = "async_iPPO-simple"
     stop = {'episodes_total':2500}
     tunner = tune.Tuner(
-        DQN,
+        PPO,
         param_space=config,
         run_config=air.RunConfig(
             log_to_file=True,
