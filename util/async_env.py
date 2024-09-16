@@ -45,8 +45,6 @@ class async_scheduling(MultiAgentEnv):
         self.init_sumo()
         # Get init observation
         obs = self._get_obs()
-        # Operable penalty
-        self.operable_penalty = {}
         # done flag
         self.done['__all__'] = False
         return obs
@@ -93,8 +91,6 @@ class async_scheduling(MultiAgentEnv):
             total = tmp_A+tmp_B+tmp_C+tmp_D+tmp_E
             product_list = [current_time,step_lenth,total,tmp_A,tmp_B,tmp_C,tmp_D,tmp_E]
             f_csv.writerow(product_list)
-            if total != 0:
-                print(f"Successful produce A:{tmp_A}, B:{tmp_B}, C:{tmp_C}, D:{tmp_D}, E:{tmp_E}")
         
         with open(self.agent_file, 'a') as f:
             f_csv = writer(f)
@@ -203,7 +199,8 @@ class async_scheduling(MultiAgentEnv):
         # Second factor: driving cost
         gk = 0.001
         fk = 0.002
-        if agent.weight == 0:
+        agent.refresh_distance()
+        if agent.last_transport == 0:
             uk = gk
         else:
             uk = gk + fk

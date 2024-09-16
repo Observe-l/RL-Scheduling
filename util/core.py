@@ -122,7 +122,7 @@ class Truck(object):
             self.state = 'waitting'
             self.operable_flag = True
         
-        self.refresh_distance()
+        # self.refresh_distance()
         return {'state':self.state, 'postion':self.position}
 
 
