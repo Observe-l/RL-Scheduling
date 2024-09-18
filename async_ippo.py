@@ -24,7 +24,7 @@ if __name__ == "__main__":
         "env": async_scheduling,
         "env_config": {"algo":"async-iPPO-simple"},
         "disable_env_checking":True,
-        "num_workers": 32,
+        "num_workers": 16,
         "num_envs_per_worker": 1,
         "num_cpus_per_worker": 1,
         "ignore_worker_failures":True,

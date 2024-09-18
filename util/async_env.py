@@ -14,7 +14,7 @@ from ray.rllib.env.multi_agent_env import MultiAgentEnv
 class async_scheduling(MultiAgentEnv):
     def __init__(self, env_config):
         # 12 Trucks, 4 Factories. The last factory is not agent
-        self.truck_num = 12
+        self.truck_num = 30
         self.factory_num = 50
         # init sumo at the begining
         self.init_sumo()
@@ -33,7 +33,7 @@ class async_scheduling(MultiAgentEnv):
         random_string = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
         self.path = f"/home/lwh/Documents/Code/RL-Scheduling/result/{env_config['algo']}/exp_{random_string}"
 
-    def reset(self):
+    def reset(self, seed=None, options=None):
         '''
         Reset the environment state and return the initial observations for each agent.
         '''
@@ -47,7 +47,7 @@ class async_scheduling(MultiAgentEnv):
         obs = self._get_obs()
         # done flag
         self.done['__all__'] = False
-        return obs
+        return obs, {}
 
     def step(self, action_dict):
         '''
@@ -65,7 +65,7 @@ class async_scheduling(MultiAgentEnv):
             traci.simulationStep()
             # Refresh truck state
             tmp_state = [tmp_truck.refresh_state() for tmp_truck in self.truck_agents]
-            self.manager.async_rl_produce_load()
+            self.manager.rl_produce_load()
             trucks_operable = [tmp_truck.operable_flag for tmp_truck in self.truck_agents]
             # If any of the trucks are operable, break the loop
             sumo_flag = False if any(trucks_operable) else True
@@ -114,7 +114,7 @@ class async_scheduling(MultiAgentEnv):
         if current_time >= 24:
             self.done['__all__'] = True
 
-        return obs, rewards, self.done, {}
+        return obs, rewards, self.done, self.done, {}
 
     def _get_obs(self) -> dict:
         '''
