@@ -28,7 +28,6 @@ class Truck(object):
 
         '''
         self.id = truck_id
-        self.truck = True
 
         # Random select the init postion
         init_position = f'Factory{random.randint(0,factory_number-1)}'
