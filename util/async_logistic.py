@@ -167,7 +167,7 @@ class async_scheduling(MultiAgentEnv):
     def init_env(self):
         '''Generate Truck and factory'''
         # Get the lane id
-        parking_dict = self.xml_dict("map/sg_map/factory.prk.xml")
+        # parking_dict = self.xml_dict("map/sg_map/factory.prk.xml")
         # Get map data
         map_data = np.load("map/50f.npy",allow_pickle=True).item()
         # Truck agents
@@ -240,6 +240,7 @@ class async_scheduling(MultiAgentEnv):
         return parking_dict
     
     def flag_reset(self):
+        self.invalid = {}
         for tmp_factory in self.factory:
             tmp_factory.step_final_product=0
     

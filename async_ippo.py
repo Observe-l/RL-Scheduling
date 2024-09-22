@@ -37,7 +37,7 @@ if __name__ == "__main__":
     })
 
     exp_name = "async_iPPO"
-    stop = {'timesteps_total':2500}
+    stop = {'training_iteration':10000}
     tunner = tune.Tuner(
         PPO,
         param_space=config,
