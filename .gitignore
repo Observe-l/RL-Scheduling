@@ -1,5 +1,5 @@
 __pycache__/
 result/
 train_ray/
-map/
+map/sg_map
 *.ipynb
