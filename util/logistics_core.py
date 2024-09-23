@@ -67,7 +67,6 @@ class Truck(object):
         self.weight = self.capacity
         self.state = 'pending for delivery'
         self.operable_flag = True
-        self.total_product += self.weight
 
     def unload_cargo(self) -> None:
         '''
@@ -97,7 +96,7 @@ class Factory(object):
                  product: dict = {'P1':{}}) -> None:
         self.id = factory_id
         self.rate = rate
-        self.step_final_product = 0
+        self.total_final_product = 0
         self.warehouse = pd.DataFrame(columns=['Material', 'Quantity'], dtype=float)
         self.warehouse.set_index('Material', inplace=True)
         for tmp_material in material:
@@ -129,7 +128,7 @@ class Factory(object):
                 for tmp_item, tmp_ratio in tmp_raw.items():
                     self.add_material(tmp_item, -item_num*tmp_ratio)
             if tmp_product == 'A' or tmp_product == 'B' or tmp_product == 'C' or tmp_product == 'D' or tmp_product == 'E':
-                self.step_final_product += item_num
+                self.total_final_product += item_num
     
     def load_truck(self, truck:Truck, product:str) -> None:
         '''Load product onto truck if the truck is in the 'waiting' state and enough product is available.'''

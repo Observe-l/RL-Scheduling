@@ -134,8 +134,10 @@ class async_scheduling(MultiAgentEnv):
     def _single_reward(self, agent:Truck):
         # First factor: unit profile
         rew_final_product = 0
+        tmp_final_product = 0
         for tmp_factory in self.factory:
-            rew_final_product += 40 * tmp_factory.step_final_product
+            tmp_final_product +=  tmp_factory.total_final_product
+        rew_final_product += 40 * (tmp_final_product - agent.total_product)
         # Second factor: driving cost
         gk = 0.001
         fk = 0.002
@@ -160,6 +162,7 @@ class async_scheduling(MultiAgentEnv):
         rew_short = agent.last_transport
         # Reset the short_term reward
         agent.last_transport = 0
+        agent.total_product = tmp_final_product
         # Total reward
         rew = rew_final_product + rew_short - rew_driving - rew_ass - psq
         return rew
@@ -240,9 +243,7 @@ class async_scheduling(MultiAgentEnv):
         return parking_dict
     
     def flag_reset(self):
-        self.invalid = {}
-        for tmp_factory in self.factory:
-            tmp_factory.step_final_product=0
+        self.invalid = []
     
     def save_results(self, time, lenth, action_dict,rewards):
         current_time = round(time/3600,3)
