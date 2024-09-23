@@ -70,7 +70,7 @@ class async_scheduling(MultiAgentEnv):
         # Get observation, reward. record the result
         obs = self._get_obs()
         rewards = self._get_reward(action_dict)
-        rewards.update({tmp_key:-100 for tmp_key in self.invalid})
+        rewards.update({tmp_key:-50 for tmp_key in self.invalid})
         # Reset all indicator
         self.flag_reset()
         # Save the results
@@ -137,10 +137,10 @@ class async_scheduling(MultiAgentEnv):
         tmp_final_product = 0
         for tmp_factory in self.factory:
             tmp_final_product +=  tmp_factory.total_final_product
-        rew_final_product += 40 * (tmp_final_product - agent.total_product)
+        rew_final_product = 10 * (tmp_final_product - agent.total_product)
         # Second factor: driving cost
-        gk = 0.001
-        fk = 0.002
+        gk = 0.00001
+        fk = 0.00002
         if agent.last_transport == 0:
             uk = gk
         else:
@@ -148,7 +148,7 @@ class async_scheduling(MultiAgentEnv):
         rew_driving = uk * agent.driving_distance
 
         # Third factor: asset cost
-        rew_ass = 10
+        rew_ass = 0.1
 
         # Penalty factor
         gamma1 = 0.5
@@ -156,10 +156,10 @@ class async_scheduling(MultiAgentEnv):
         rq = 1
         tq = agent.time_step
         sq = gamma1 * tq/2000 + gamma2 * (1-rq)
-        psq = np.log((1-sq)/(1+sq))
+        psq = 0.1 * np.log((1+sq)/(1-sq))
 
         # Short-term reward. Arrive right factory
-        rew_short = agent.last_transport
+        rew_short = 0.5 * agent.last_transport
         # Reset the short_term reward
         agent.last_transport = 0
         agent.total_product = tmp_final_product
