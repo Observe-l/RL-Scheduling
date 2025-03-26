@@ -27,7 +27,7 @@ if __name__ == "__main__":
         "num_workers": 1,
         "num_envs_per_env_runner": 1,
         "num_cpus_per_env_runner": 1,
-        "num_gpus_per_env_runner": 1,
+        # "num_gpus_per_env_runner": 1,
         "ignore_env_runner_failures":True,
         "recreate_failed_env_runners":True,
         "multiagent":{
