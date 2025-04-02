@@ -103,6 +103,8 @@ class Truck(object):
         self.last_transport += self.capacity
 
     def get_truck_product(self) -> int:
+        if self.product is None:
+            return -1
         if self.product.startswith('P'):
             return int(self.product[1:])
         else:

@@ -3,3 +3,5 @@ result/
 train_ray/
 map/sg_map
 *.ipynb
+model/
+cisco_engine_data/

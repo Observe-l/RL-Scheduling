@@ -1,10 +1,10 @@
 import random
-from truck import Truck
+from util.truck import Truck
 
 class Factory(object):
     def __init__(self, factory_id:str = 'Factory0',\
                  rate:float = 0.01,\
-                 material:list = [],\
+                 material:list = [None],\
                  product: str = 'P0') -> None:
         self.id = factory_id
         self.rate = rate
@@ -17,6 +17,8 @@ class Factory(object):
         self.product_num = 0
         if self.material[0] is not None:
             self.material_num = {m:0 for m in self.material}
+        else:
+            self.material_num = {self.product:0}
     
     def produce(self) -> None:
         if self.material[0] is not None:
@@ -51,6 +53,9 @@ class Producer(object):
                 if t.product in self.factory[t.position].material:
                     self.factory[t.position].material_num[t.product] += t.weight
                     t.unload_goods(self.load_time)
+                # If the trucks arrive the wrong factory, mark it as waiting
+                else:
+                    t.state = 'waiting'
             # Load the goods to the truck
             elif t.state == 'waiting' and t.weight == 0:
                 if self.factory[t.position].product_num > t.capacity:

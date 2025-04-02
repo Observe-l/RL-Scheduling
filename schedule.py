@@ -1,29 +1,44 @@
 import numpy as np
-import random
-import string
+from gymnasium.spaces import Discrete, Box
 from collections import defaultdict
 from pathlib import Path
 from csv import writer
 from util.truck import Truck
 from util.factory import Factory, Producer
+# from util.rul_gen import predictor
+import datetime
 
 class async_scheduling(object):
     def __init__(self, env_config):
         self.truck_num = env_config['truck_num']
         self.factory_num = env_config['factory_num']
+
+        self.init_env()
         self.observation_space = {}
         self.action_space = {}
+        obs = self._get_obs()
+        for agent_id, tmp_obs in obs.items():
+            obs_dim = len(tmp_obs)
+            self.observation_space[agent_id] = Box(low=-1, high=1000, shape=(obs_dim,))
+            self.action_space[agent_id] = Discrete(50)
         self.share_observation_space = []
         share_obs_dim = 0
+        self.done = {}
 
         self.episode_num = 0
-        random_string = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
-        self.path = f"/home/lwh/Documents/Code/RL-Scheduling/result/{env_config['algo']}/exp_{random_string}"
+        # random_string = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+        # self.path = f"/home/lwh/Documents/Code/RL-Scheduling/result/rul/{env_config['algo']}/exp_{random_string}"
+        # Create path with current date
+        current_date = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M')
+        self.path = f"/home/lwh/Documents/Code/RL-Scheduling/result/rul/{env_config['algo']}/{current_date}"
+        Path(self.path).mkdir(parents=True, exist_ok=True)
+        # self.preditor = predictor()
     
     def reset(self, seed=None, options=None):
         '''Reset the environment'''
         self.make_folder()
         self.init_env()
+        
         self.episode_num += 1
 
         obs = self._get_obs()
@@ -39,11 +54,14 @@ class async_scheduling(object):
         sumo_flag = True
         step_length = 0
         while sumo_flag:
-            [tmp_truck.truck_step() for tmp_truck in self.truck_agents]
+            # [tmp_truck.truck_step() for tmp_truck in self.truck_agents]
             self.producer.produce_step()
-            sumo_flag = any([tmp_truck.operable_flag for tmp_truck in self.truck_agents])
+            # sumo_flag = any([tmp_truck.operable_flag for tmp_truck in self.truck_agents])
+            sumo_flag = not any([tmp_truck.operable_flag for tmp_truck in self.truck_agents])
             step_length += 1
             self.episode_len += 1
+            # if not sumo_flag:
+            #     print(f"Step length: {step_length}, Sumo flag: {sumo_flag}")
         
         # Get observation, reward. record the result
         obs = self._get_obs()
@@ -62,7 +80,7 @@ class async_scheduling(object):
         '''Set the action for the truck'''
         for agent_id, action in action_dict.items():
             tmp_truck = self.truck_agents[int(agent_id)]
-            target_id = self.factory[int(action)].id
+            target_id = f"Factory{action}"
             # Invalid action
             if target_id == tmp_truck.position:
                 self.invalid.append(agent_id)
@@ -78,7 +96,7 @@ class async_scheduling(object):
             fac_truck_num[tmp_truck.destination] += 1
         warehouse_storage = []
         com_truck_num = []
-        for tmp_factory in self.factory:
+        for tmp_factory in self.factory.values():
             # Get the storage of material and product
             material_storage = list(tmp_factory.material_num.values())
             product_storage = tmp_factory.product_num
@@ -115,8 +133,9 @@ class async_scheduling(object):
         # agent.total_product is the record of number of total product at last time step
         rew_final_product = 0
         tmp_final_product = 0
-        for tmp_factory in self.factory[-5:]:
-            tmp_final_product +=  tmp_factory.total_final_product
+        final_factory = ["Factory45", "Factory46", "Factory47", "Factory48", "Factory49"]
+        for tmp_factory_id in final_factory:
+            tmp_final_product +=  self.factory[tmp_factory_id].total_final_product
         rew_final_product = 10 * (tmp_final_product - agent.total_product)
         # Second factor: driving cost
         gk = 0.00001
@@ -151,7 +170,8 @@ class async_scheduling(object):
         '''Generate trucks and factories'''
         map_data = np.load("map/50f.npy",allow_pickle=True).item()
         self.truck_agents = [Truck(truck_id=f'truck_{i}', map_data=map_data) for i in range(self.truck_num)]
-        self.factory = [Factory(factory_id=f'factory_{i}', product=f'P{i}') for i in range(self.factory_num)]
+        # self.factory = [Factory(factory_id=f'factory_{i}', product=f'P{i}') for i in range(self.factory_num)]
+        self.factory = {f'Factory{i}': Factory(factory_id=f'Factory{i}', product=f'P{i}') for i in range(self.factory_num)}
 
         '''Generate the final product'''
         final_product = ['A', 'B', 'C', 'D', 'E']
@@ -161,7 +181,7 @@ class async_scheduling(object):
             tmp_factory_id = f'Factory{45 + i}'
             tmp_materials = [remaining_materials.pop() for _ in range(9)]
             tmp_factory = Factory(factory_id=tmp_factory_id, product=product, material=tmp_materials)
-            self.factory.append(tmp_factory)
+            self.factory[tmp_factory_id] = tmp_factory
             for transport_material in tmp_materials:
                 transport_idx[transport_material] = tmp_factory_id
         
@@ -222,11 +242,11 @@ class async_scheduling(object):
         current_time = round(time/3600,3)
         with open(self.product_file, 'a') as f:
             f_csv = writer(f)
-            tmp_A = round(self.factory[45].total_final_product,3)
-            tmp_B = round(self.factory[46].total_final_product,3)
-            tmp_C = round(self.factory[47].total_final_product,3)
-            tmp_D = round(self.factory[48].total_final_product,3)
-            tmp_E = round(self.factory[49].total_final_product,3)
+            tmp_A = round(self.factory['Factory45'].total_final_product,3)
+            tmp_B = round(self.factory['Factory46'].total_final_product,3)
+            tmp_C = round(self.factory['Factory47'].total_final_product,3)
+            tmp_D = round(self.factory['Factory48'].total_final_product,3)
+            tmp_E = round(self.factory['Factory49'].total_final_product,3)
             total = tmp_A+tmp_B+tmp_C+tmp_D+tmp_E
             product_list = [current_time,lenth,total,tmp_A,tmp_B,tmp_C,tmp_D,tmp_E]
             f_csv.writerow(product_list)
