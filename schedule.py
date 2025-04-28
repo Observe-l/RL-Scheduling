@@ -5,7 +5,7 @@ from pathlib import Path
 from csv import writer
 from util.truck import Truck
 from util.factory import Factory, Producer
-# from util.rul_gen import predictor
+from util.rul_gen import predictor
 import datetime
 
 class async_scheduling(object):
@@ -16,11 +16,12 @@ class async_scheduling(object):
         self.init_env()
         self.observation_space = {}
         self.action_space = {}
+        self.predictor = predictor()
         obs = self._get_obs()
         for agent_id, tmp_obs in obs.items():
             obs_dim = len(tmp_obs)
-            self.observation_space[agent_id] = Box(low=-1, high=1000, shape=(obs_dim,))
-            self.action_space[agent_id] = Discrete(50)
+            self.observation_space[agent_id] = Box(low=-1, high=30000, shape=(obs_dim,))
+            self.action_space[agent_id] = Discrete(51)
         self.share_observation_space = []
         share_obs_dim = 0
         self.done = {}
@@ -32,7 +33,7 @@ class async_scheduling(object):
         current_date = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M')
         self.path = f"/home/lwh/Documents/Code/RL-Scheduling/result/rul/{env_config['algo']}/{current_date}"
         Path(self.path).mkdir(parents=True, exist_ok=True)
-        # self.preditor = predictor()
+        
     
     def reset(self, seed=None, options=None):
         '''Reset the environment'''
@@ -80,12 +81,16 @@ class async_scheduling(object):
         '''Set the action for the truck'''
         for agent_id, action in action_dict.items():
             tmp_truck = self.truck_agents[int(agent_id)]
-            target_id = f"Factory{action}"
-            # Invalid action
-            if target_id == tmp_truck.position:
-                self.invalid.append(agent_id)
+            # Matain the truck
+            if action == 50:
+                tmp_truck.maintain()
             else:
-                tmp_truck.delivery(destination=target_id)
+                target_id = f"Factory{action}"
+                # Invalid action
+                if target_id == tmp_truck.position:
+                    self.invalid.append(agent_id)
+                else:
+                    tmp_truck.delivery(destination=target_id)
 
     def _get_obs(self):
         '''Return back a dictionary for operable agents.'''
@@ -117,7 +122,10 @@ class async_scheduling(object):
             # The transported product
             product = tmp_truck.get_truck_product()
             agent_id = int(tmp_truck.id.split('_')[1])
-            observation[agent_id] = np.concatenate([queue_obs]+[distance]+[[position]]+[[weight]]+[[product]])
+            # Get RUL from truck's sensor reading
+            rul = self.predictor.predict(tmp_truck.eng_obs)
+            tmp_truck.rul = rul
+            observation[agent_id] = np.concatenate([[rul]]+[queue_obs]+[distance]+[[position]]+[[weight]]+[[product]])
         return observation
     
     def _get_reward(self, action_dict:dict):
@@ -155,6 +163,8 @@ class async_scheduling(object):
         rq = 1
         tq = agent.time_step
         sq = gamma1 * tq/2000 + gamma2 * (1-rq)
+        if sq >= 1:
+            sq = 0.99
         psq = 0.1 * np.log((1+sq)/(1-sq))
 
         # Short-term reward. Arrive right factory
@@ -206,6 +216,7 @@ class async_scheduling(object):
         self.product_file = folder_path + 'product.csv'
         self.agent_file = folder_path + 'result.csv'
         self.distance_file = folder_path + 'distance.csv'
+        self.truck_state = folder_path + 'truck_state.csv'
 
         # Create result file
         with open(self.product_file,'w') as f:
@@ -225,7 +236,7 @@ class async_scheduling(object):
             debug_file = self.debug_files_path + f'{truck_agent.id}.csv'
             with open(debug_file, 'w') as f:
                 f_csv = writer(f)
-                result_list = ['time', 'position', 'weight', 'product','destination','driving_distance','total_distance']
+                result_list = ['time', 'position', 'weight', 'product','destination','driving_distance','total_distance','rul']
                 f_csv.writerow(result_list)
 
         # Create active truck file
@@ -236,6 +247,11 @@ class async_scheduling(object):
                 agent_list = [f'step_{agent.id}', f'total_{agent.id}']
                 distance_list += agent_list
             f_csv.writerow(distance_list)
+
+        with open(self.truck_state, 'w') as f:
+            f_csv = writer(f)
+            result_list = ['time', 'normal_num', 'broken_num', 'maintain_num', 'broken_id', 'maintain_id']
+            f_csv.writerow(result_list)
 
 
     def save_results(self, time, lenth, action_dict,rewards):
@@ -264,10 +280,17 @@ class async_scheduling(object):
                     debug_file = self.debug_files_path + f'{tmp_agent.id}.csv'
                     with open(debug_file, 'a') as f:
                         f_csv_d = writer(f)
-                        debug_list = [current_time, tmp_agent.position, tmp_agent.weight, tmp_agent.product, tmp_agent.destination, tmp_agent.driving_distance, tmp_agent.total_distance]
+                        debug_list = [current_time, tmp_agent.position, tmp_agent.weight, tmp_agent.product, tmp_agent.destination, tmp_agent.driving_distance, tmp_agent.total_distance, tmp_agent.rul]
                         f_csv_d.writerow(debug_list)
                 else:
                     agent_list += ['NA', 'NA', tmp_agent.cumulate_reward]
+                
+                if tmp_agent.state == 'repair' or tmp_agent.state == 'maintain':
+                    debug_file = self.debug_files_path + f'{tmp_agent.id}.csv'
+                    with open(debug_file, 'a') as f:
+                        f_csv_d = writer(f)
+                        debug_list = [current_time, tmp_agent.position, tmp_agent.weight, tmp_agent.product, tmp_agent.state, tmp_agent.driving_distance, tmp_agent.total_distance, tmp_agent.rul]
+                        f_csv_d.writerow(debug_list)
             f_csv.writerow(agent_list)
         
         with open(self.distance_file, 'a') as f:
@@ -276,3 +299,23 @@ class async_scheduling(object):
             for tmp_agent in self.truck_agents:
                 distance_list += [tmp_agent.driving_distance, tmp_agent.total_distance]
             f_csv.writerow(distance_list)
+
+        with open(self.truck_state, 'a') as f:
+            f_csv = writer(f)
+            truck_state_list = [current_time]
+            normal_num = 0
+            broken_num = 0
+            maintain_num = 0
+            broken_id = []
+            maintain_id = []
+            for tmp_agent in self.truck_agents:
+                if tmp_agent.state == 'repair':
+                    broken_num += 1
+                    broken_id.append(tmp_agent.id)
+                elif tmp_agent.state == 'maintain':
+                    maintain_num += 1
+                    maintain_id.append(tmp_agent.id)
+            normal_num = self.truck_num - broken_num - maintain_num
+            truck_state_list += [normal_num, broken_num, maintain_num]
+            truck_state_list += [broken_id, maintain_id]
+            f_csv.writerow(truck_state_list)

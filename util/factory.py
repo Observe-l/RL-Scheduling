@@ -39,6 +39,7 @@ class Producer(object):
         self.truck = truck
         self.transport_idx = transport_idx
         self.load_time = load_time
+        self.final_product = ['A', 'B', 'C', 'D', 'E']
     
     def produce_step(self) -> None:
         # Produce all products
@@ -58,7 +59,7 @@ class Producer(object):
                     t.state = 'waiting'
             # Load the goods to the truck
             elif t.state == 'waiting' and t.weight == 0:
-                if self.factory[t.position].product_num > t.capacity:
+                if self.factory[t.position].product_num > t.capacity and self.factory[t.position].product not in self.final_product:
                     self.factory[t.position].product_num -= t.capacity
                     t.load_goods(self.factory[t.position].product, self.load_time)
 
